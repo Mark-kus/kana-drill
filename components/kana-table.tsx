@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useMemo, useRef, useCallback, useEffect } from "react"
+import { useState, useMemo, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import type { KanaEntry, KanaCell } from "@/lib/kana-data"
 import { shuffleArray } from "@/lib/kana-data"
+import { useLongPress } from "@/hooks/use-long-press"
 
 interface KanaTableProps {
   cells: KanaCell[]
@@ -24,8 +25,8 @@ export function KanaTable({
   disabled,
   shuffleSeed,
 }: KanaTableProps) {
+  // shuffleSeed is not used directly — its value change triggers a re-shuffle via the dependency array
   const shuffledCells = useMemo(() => {
-    // We use the seed simply to trigger re-shuffle on mode change
     void shuffleSeed
     return shuffleArray(cells)
   }, [cells, shuffleSeed])
@@ -63,108 +64,17 @@ function KanaCellButton({
   disabled: boolean
 }) {
   const [isHovered, setIsHovered] = useState(false)
-  const [isLongPressed, setIsLongPressed] = useState(false)
-  const [longPressProgress, setLongPressProgress] = useState(0)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const touchStartPos = useRef<{ x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const didLongPress = useRef(false)
-  const isTouching = useRef(false)
   const hasVariants = !!cell.dakuten || !!cell.handakuten
 
-  const LONG_PRESS_DURATION = 400 // ms
-
-  const clearTimers = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-    if (progressTimer.current) {
-      clearInterval(progressTimer.current)
-      progressTimer.current = null
-    }
-    setLongPressProgress(0)
-  }, [])
-
-  const startLongPress = useCallback(() => {
-    if (!hasVariants || disabled) return
-    didLongPress.current = false
-
-    const startTime = Date.now()
-    progressTimer.current = setInterval(() => {
-      const elapsed = Date.now() - startTime
-      setLongPressProgress(Math.min(elapsed / LONG_PRESS_DURATION, 1))
-    }, 16)
-
-    longPressTimer.current = setTimeout(() => {
-      setIsLongPressed(true)
-      setLongPressProgress(0)
-      if (progressTimer.current) clearInterval(progressTimer.current)
-      didLongPress.current = true
-    }, LONG_PRESS_DURATION)
-  }, [hasVariants, disabled])
-
-  const cancelLongPress = useCallback(() => {
-    clearTimers()
-  }, [clearTimers])
-
-  // Close popup when clicking outside
-  useEffect(() => {
-    if (!isLongPressed) return
-    const handleOutside = (e: MouseEvent | TouchEvent) => {
-      // Don't close if the touch/click is inside this cell (e.g. on variant buttons)
-      if (containerRef.current && containerRef.current.contains(e.target as Node)) {
-        return
-      }
-      setIsLongPressed(false)
-    }
-    // Delay to avoid immediately closing
-    const timer = setTimeout(() => {
-      document.addEventListener("touchstart", handleOutside)
-      document.addEventListener("mousedown", handleOutside)
-    }, 50)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener("touchstart", handleOutside)
-      document.removeEventListener("mousedown", handleOutside)
-    }
-  }, [isLongPressed])
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      isTouching.current = true
-      const touch = e.touches[0]
-      touchStartPos.current = { x: touch.clientX, y: touch.clientY }
-      startLongPress()
-    },
-    [startLongPress]
-  )
-
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (!touchStartPos.current) return
-      const touch = e.touches[0]
-      const dx = touch.clientX - touchStartPos.current.x
-      const dy = touch.clientY - touchStartPos.current.y
-      if (Math.sqrt(dx * dx + dy * dy) > 10) {
-        cancelLongPress()
-      }
-    },
-    [cancelLongPress]
-  )
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      cancelLongPress()
-      if (didLongPress.current) {
-        e.preventDefault() // prevent click after long press
-      }
-      // Clear touch flag after a short delay to suppress the synthetic mouseenter
-      setTimeout(() => { isTouching.current = false }, 100)
-    },
-    [cancelLongPress]
-  )
+  const {
+    isLongPressed,
+    setIsLongPressed,
+    longPressProgress,
+    didLongPress,
+    isTouching,
+    touchHandlers,
+  } = useLongPress(containerRef, { disabled, enabled: hasVariants })
 
   const handleClick = useCallback(() => {
     if (didLongPress.current) {
@@ -172,7 +82,7 @@ function KanaCellButton({
       return
     }
     onKanaClick(cell.base)
-  }, [onKanaClick, cell.base])
+  }, [onKanaClick, cell.base, didLongPress])
 
   const getFeedback = (entry: KanaEntry) => {
     const isCorrect = feedbackKana === entry.kana && feedbackType === "correct"
@@ -201,15 +111,17 @@ function KanaCellButton({
     <div
       ref={containerRef}
       className="relative"
-      onMouseEnter={() => { if (!isTouching.current) setIsHovered(true) }}
+      onMouseEnter={() => {
+        if (!isTouching.current) setIsHovered(true)
+      }}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Base kana button */}
       <button
         onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchStart={touchHandlers.onTouchStart}
+        onTouchMove={touchHandlers.onTouchMove}
+        onTouchEnd={touchHandlers.onTouchEnd}
         onContextMenu={(e) => {
           if (hasVariants && "ontouchstart" in window) e.preventDefault()
         }}
@@ -233,8 +145,11 @@ function KanaCellButton({
             !baseFeedback.isIncorrect &&
             !baseFeedback.isCorrectAnswer &&
             "opacity-70 cursor-not-allowed",
-          hasVariants && !baseFeedback.isCorrect && !baseFeedback.isIncorrect && !baseFeedback.isCorrectAnswer &&
-            "max-sm:ring-1 max-sm:ring-primary/20"
+          hasVariants &&
+            !baseFeedback.isCorrect &&
+            !baseFeedback.isIncorrect &&
+            !baseFeedback.isCorrectAnswer &&
+            "max-sm:ring-1 max-sm:ring-primary/20",
         )}
         aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}${hasVariants ? ". Mantener presionado para variantes" : ""}`}
       >
@@ -252,7 +167,6 @@ function KanaCellButton({
       {/* Variant indicator — badges on mobile, subtle dots on desktop */}
       {hasVariants && !showVariants && (
         <>
-          {/* Mobile: prominent badges */}
           <div className="absolute -top-1 -right-1 flex gap-px pointer-events-none sm:hidden">
             {cell.dakuten && (
               <span className="w-4 h-4 rounded-full bg-primary/80 text-primary-foreground flex items-center justify-center text-[8px] font-bold shadow-sm border border-background">
@@ -265,12 +179,9 @@ function KanaCellButton({
               </span>
             )}
           </div>
-          {/* Desktop: original subtle dots */}
           <div className="hidden sm:flex absolute top-1.5 right-1.5 gap-px">
             <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-            {cell.handakuten && (
-              <div className="w-1.5 h-1.5 rounded-full bg-accent/40" />
-            )}
+            {cell.handakuten && <div className="w-1.5 h-1.5 rounded-full bg-accent/40" />}
           </div>
         </>
       )}
@@ -290,7 +201,6 @@ function KanaCellButton({
                 setIsLongPressed(false)
               }}
               disabled={disabled}
-              label="゛"
             />
           )}
           {cell.handakuten && (
@@ -302,7 +212,6 @@ function KanaCellButton({
                 setIsLongPressed(false)
               }}
               disabled={disabled}
-              label="゜"
             />
           )}
         </div>
@@ -316,13 +225,11 @@ function VariantButton({
   feedback,
   onClick,
   disabled,
-  label,
 }: {
   entry: KanaEntry
   feedback: { isCorrect: boolean; isIncorrect: boolean; isCorrectAnswer: boolean }
   onClick: (entry: KanaEntry) => void
   disabled: boolean
-  label: string
 }) {
   return (
     <button
@@ -338,16 +245,14 @@ function VariantButton({
         "w-11 h-11 sm:w-10 sm:h-10 rounded-md flex items-center justify-center text-lg sm:text-base font-medium shadow-md border transition-all duration-150 select-none",
         "hover:scale-110 active:scale-95",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        feedback.isCorrect &&
-          "bg-success text-success-foreground border-success",
+        feedback.isCorrect && "bg-success text-success-foreground border-success",
         feedback.isIncorrect &&
           "bg-destructive text-destructive-foreground border-destructive animate-shake",
-        feedback.isCorrectAnswer &&
-          "bg-destructive text-destructive-foreground border-destructive",
+        feedback.isCorrectAnswer && "bg-destructive text-destructive-foreground border-destructive",
         !feedback.isCorrect &&
           !feedback.isIncorrect &&
           !feedback.isCorrectAnswer &&
-          "bg-card text-foreground border-border hover:bg-primary hover:text-primary-foreground hover:border-primary"
+          "bg-card text-foreground border-border hover:bg-primary hover:text-primary-foreground hover:border-primary",
       )}
       aria-label={`Kana ${entry.kana}, romaji ${entry.romaji}`}
       title={entry.kana}

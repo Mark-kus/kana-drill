@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { translations, type Language, type Translations } from "@/lib/translations"
 
 interface LanguageContextType {
@@ -15,6 +15,13 @@ const LANGUAGE_ORDER: Language[] = ["en", "es", "pt"]
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>("en")
+
+  // Auto-detect browser language on mount
+  useEffect(() => {
+    const browserLang = navigator.language.split("-")[0].toLowerCase()
+    if (browserLang === "es") setLanguage("es")
+    else if (browserLang === "pt") setLanguage("pt")
+  }, [])
 
   const cycleLanguage = useCallback(() => {
     setLanguage((prev) => {

@@ -84,4 +84,30 @@ export const translations = {
   },
 } as const
 
-export type Translations = typeof translations["en"]
+export type Translations = {
+  loading: string
+  quizQuestion: string
+  romaji: string
+  skip: string
+  drawKana: string
+  bestMatch: string
+  correct: string
+  total: string
+  streak: string
+  stroke: string
+  strokes: string
+  clear: string
+  tryMoreStrokes: (range: string) => string
+  tryFewerStrokes: (range: string) => string
+  tryMorePrecision: string
+  themeSystem: string
+  themeDark: string
+  themeLight: string
+  themeAriaLabel: (current: string) => string
+  themeNameSystem: string
+  themeNameDark: string
+  themeNameLight: string
+  langLabel: string
+  kanaHintDesktop: string
+  kanaHintMobile: string
+}

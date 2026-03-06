@@ -2,14 +2,8 @@
 
 import { useRef, useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
-import type { KanaStrokeRange } from "@/lib/kana-data"
-import { matchDrawingShape, MIN_SHAPE_SCORE } from "@/lib/kana-recognition"
+import { evaluateDrawing, type CandidateKana } from "@/lib/kana-recognition"
 import { useLanguage } from "@/components/language-provider"
-
-interface CandidateKana {
-  kana: string
-  strokeRange: KanaStrokeRange
-}
 
 interface DrawingCanvasProps {
   targetKana: string
@@ -93,7 +87,6 @@ export function DrawingCanvas({
     const pos = getPos(e)
     lastPosRef.current = pos
 
-    // Draw a small dot at the start so taps are visible
     ctx.fillStyle = getStrokeColor()
     ctx.beginPath()
     ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2)
@@ -124,6 +117,14 @@ export function DrawingCanvas({
     lastPosRef.current = pos
   }
 
+  /** Map an evaluation hint type to a localized string */
+  const translateHint = (result: ReturnType<typeof evaluateDrawing>): string | null => {
+    if (result.hintType === "more-strokes") return t.tryMoreStrokes(result.expectedStrokeRange!)
+    if (result.hintType === "fewer-strokes") return t.tryFewerStrokes(result.expectedStrokeRange!)
+    if (result.hintType === "more-precision") return t.tryMorePrecision
+    return null
+  }
+
   const handlePointerUp = () => {
     if (!isDrawingRef.current) return
     isDrawingRef.current = false
@@ -133,116 +134,19 @@ export function DrawingCanvas({
     clearAutoVerify()
     const currentStrokes = strokeCountRef.current
     autoVerifyRef.current = setTimeout(() => {
-      const result = findBestMatch(currentStrokes)
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const result = evaluateDrawing(canvas, targetKana, candidateKanas, currentStrokes)
       if (result.isCorrect) {
         onCorrect()
       } else {
         onHintChange({
           bestMatchKana: result.bestMatch,
-          strokeHint: result.hint,
+          strokeHint: translateHint(result),
         })
       }
     }, 1000)
   }
-
-  const findBestMatch = useCallback(
-    (strokes: number) => {
-      const targetEntry = candidateKanas.find((c) => c.kana === targetKana)
-
-      // Helper: stroke hint for the target kana
-      const getStrokeHint = (): string | null => {
-        if (!targetEntry) return null
-        const { min, max } = targetEntry.strokeRange
-        const range = min === max ? `${min}` : `${min}–${max}`
-        if (strokes < min) return t.tryMoreStrokes(range)
-        if (strokes > max) return t.tryFewerStrokes(range)
-        return null
-      }
-
-      // 1. Filter candidates by stroke count
-      const strokeMatches = candidateKanas.filter(
-        (c) => strokes >= c.strokeRange.min && strokes <= c.strokeRange.max
-      )
-
-      // 2. No kana matches this stroke count → stroke hint only
-      if (strokeMatches.length === 0) {
-        let bestMatch: string | null = null
-        let bestDist = Infinity
-        for (const c of candidateKanas) {
-          if (c.kana === targetKana) continue
-          const d =
-            strokes >= c.strokeRange.min && strokes <= c.strokeRange.max
-              ? 0
-              : Math.min(
-                  Math.abs(strokes - c.strokeRange.min),
-                  Math.abs(strokes - c.strokeRange.max)
-                )
-          if (d < bestDist) {
-            bestDist = d
-            bestMatch = c.kana
-          }
-        }
-        return { isCorrect: false, bestMatch, hint: getStrokeHint() }
-      }
-
-      // 3. Shape match among stroke-compatible candidates
-      const canvas = canvasRef.current
-      if (!canvas) {
-        const targetIn = strokeMatches.some((c) => c.kana === targetKana)
-        return { isCorrect: targetIn, bestMatch: null, hint: null }
-      }
-
-      const results = matchDrawingShape(
-        canvas,
-        strokeMatches.map((c) => c.kana),
-        strokes
-      )
-
-      // Debug: log top 3 matches
-      const top3 = results.slice(0, 3)
-      console.log(
-        `[KanaMatch] target=${targetKana} strokes=${strokes} top3:`,
-        top3.map((r) => `${r.kana} (${r.score.toFixed(3)})`).join(", ")
-      )
-
-      if (results.length === 0) {
-        return { isCorrect: false, bestMatch: null, hint: getStrokeHint() }
-      }
-
-      const best = results[0]
-
-      // Find the target's score in results
-      const targetResult = results.find((r) => r.kana === targetKana)
-      const SCORE_TOLERANCE = 0.05
-
-      // 4. Target is within tolerance of the best score and above minimum → correct
-      if (
-        targetResult &&
-        targetResult.score >= MIN_SHAPE_SCORE &&
-        best.score - targetResult.score <= SCORE_TOLERANCE
-      ) {
-        return { isCorrect: true, bestMatch: null, hint: null }
-      }
-
-      // 5. Target matched strokes but score too low
-      if (targetResult && targetResult.score < MIN_SHAPE_SCORE) {
-        return {
-          isCorrect: false,
-          bestMatch: null,
-          hint: t.tryMorePrecision,
-        }
-      }
-
-      // 6. Best match is a different kana (target too far from best or not in stroke matches)
-      const targetIn = strokeMatches.some((c) => c.kana === targetKana)
-      return {
-        isCorrect: false,
-        bestMatch: best.kana,
-        hint: targetIn ? null : getStrokeHint(),
-      }
-    },
-    [candidateKanas, targetKana]
-  )
 
   // Cancel pending auto-verify on unmount
   useEffect(() => {
@@ -256,7 +160,7 @@ export function DrawingCanvas({
         <span
           className={cn(
             "absolute inset-0 flex items-center justify-center text-7xl font-bold pointer-events-none select-none z-0",
-            (feedbackType === "correct" || showKanaShadow) ? "opacity-20" : "opacity-0"
+            feedbackType === "correct" || showKanaShadow ? "opacity-20" : "opacity-0",
           )}
         >
           {targetKana}
@@ -271,7 +175,7 @@ export function DrawingCanvas({
               ? "border-success bg-success/10"
               : feedbackType === "incorrect"
                 ? "border-destructive bg-destructive/10"
-                : "border-border bg-card"
+                : "border-border bg-card",
           )}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -289,7 +193,7 @@ export function DrawingCanvas({
           className={cn(
             "px-2 py-1 text-xs rounded-md transition-colors",
             "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
+            "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
         >
           {t.clear}

@@ -20,6 +20,8 @@
  * 3. Compare concatenated binary vectors with Jaccard similarity
  */
 
+import type { KanaStrokeRange } from "@/lib/kana-data"
+
 const ZONE_LEVELS = [5, 10] // coarse (5×5=25) + fine (10×10=100) = 125 dims
 const RENDER_SIZE = 128
 const ALPHA_THRESHOLD = 30
@@ -38,13 +40,23 @@ export interface ShapeMatchResult {
   score: number
 }
 
+export interface CandidateKana {
+  kana: string
+  strokeRange: KanaStrokeRange
+}
+
+export type DrawingHintType = "more-strokes" | "fewer-strokes" | "more-precision" | null
+
+export interface DrawingEvalResult {
+  isCorrect: boolean
+  bestMatch: string | null
+  hintType: DrawingHintType
+  expectedStrokeRange: string | null
+}
+
 // ── Cache ────────────────────────────────────────────────────────
 
 const kanaProfileCache = new Map<string, number[]>()
-
-export function clearMaskCache() {
-  kanaProfileCache.clear()
-}
 
 // ── Public API ───────────────────────────────────────────────────
 
@@ -363,4 +375,90 @@ function jaccardSimilarity(a: number[], b: number[]): number {
   }
   if (union === 0) return 0
   return intersection / union
+}
+
+// ── Drawing evaluation (moved from DrawingCanvas) ────────────────
+
+/**
+ * Evaluate a user's drawing against candidate kana.
+ * Returns a structured result with correctness, best match, and hint type
+ * (decoupled from translations — the caller maps hintType to translated strings).
+ */
+export function evaluateDrawing(
+  canvas: HTMLCanvasElement,
+  targetKana: string,
+  candidateKanas: CandidateKana[],
+  strokeCount: number,
+): DrawingEvalResult {
+  const targetEntry = candidateKanas.find((c) => c.kana === targetKana)
+
+  const getStrokeHint = (): { hintType: DrawingHintType; expectedStrokeRange: string | null } => {
+    if (!targetEntry) return { hintType: null, expectedStrokeRange: null }
+    const { min, max } = targetEntry.strokeRange
+    const range = min === max ? `${min}` : `${min}–${max}`
+    if (strokeCount < min) return { hintType: "more-strokes", expectedStrokeRange: range }
+    if (strokeCount > max) return { hintType: "fewer-strokes", expectedStrokeRange: range }
+    return { hintType: null, expectedStrokeRange: null }
+  }
+
+  // Filter candidates whose stroke range includes the current stroke count
+  const strokeMatches = candidateKanas.filter(
+    (c) => strokeCount >= c.strokeRange.min && strokeCount <= c.strokeRange.max,
+  )
+
+  // No kana matches this stroke count — return stroke hint only
+  if (strokeMatches.length === 0) {
+    let bestMatch: string | null = null
+    let bestDist = Infinity
+    for (const c of candidateKanas) {
+      if (c.kana === targetKana) continue
+      const d = Math.min(
+        Math.abs(strokeCount - c.strokeRange.min),
+        Math.abs(strokeCount - c.strokeRange.max),
+      )
+      if (d < bestDist) {
+        bestDist = d
+        bestMatch = c.kana
+      }
+    }
+    const hint = getStrokeHint()
+    return { isCorrect: false, bestMatch, ...hint }
+  }
+
+  // Shape match among stroke-compatible candidates
+  const results = matchDrawingShape(
+    canvas,
+    strokeMatches.map((c) => c.kana),
+    strokeCount,
+  )
+
+  if (results.length === 0) {
+    const hint = getStrokeHint()
+    return { isCorrect: false, bestMatch: null, ...hint }
+  }
+
+  const best = results[0]
+  const targetResult = results.find((r) => r.kana === targetKana)
+  const SCORE_TOLERANCE = 0.05
+
+  // Target is within tolerance of the best score and above minimum threshold
+  if (
+    targetResult &&
+    targetResult.score >= MIN_SHAPE_SCORE &&
+    best.score - targetResult.score <= SCORE_TOLERANCE
+  ) {
+    return { isCorrect: true, bestMatch: null, hintType: null, expectedStrokeRange: null }
+  }
+
+  // Target matched strokes but shape score too low
+  if (targetResult && targetResult.score < MIN_SHAPE_SCORE) {
+    return { isCorrect: false, bestMatch: null, hintType: "more-precision", expectedStrokeRange: null }
+  }
+
+  // Best match is a different kana
+  const targetInStrokeMatches = strokeMatches.some((c) => c.kana === targetKana)
+  const hint = targetInStrokeMatches
+    ? { hintType: null as DrawingHintType, expectedStrokeRange: null }
+    : getStrokeHint()
+  return { isCorrect: false, bestMatch: best.kana, ...hint }
 }
