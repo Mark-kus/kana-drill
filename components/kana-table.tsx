@@ -168,7 +168,8 @@ function KanaCellButton({
   const getFeedback = (entry: KanaEntry) => {
     const isCorrect = feedbackKana === entry.kana && feedbackType === "correct"
     const isIncorrect = feedbackKana === entry.kana && feedbackType === "incorrect"
-    return { isCorrect, isIncorrect }
+    const isCorrectAnswer = correctKana === entry.kana
+    return { isCorrect, isIncorrect, isCorrectAnswer }
   }
 
   const baseFeedback = getFeedback(cell.base)
@@ -182,8 +183,10 @@ function KanaCellButton({
       isLongPressed ||
       dakutenFeedback?.isCorrect ||
       dakutenFeedback?.isIncorrect ||
+      dakutenFeedback?.isCorrectAnswer ||
       handakutenFeedback?.isCorrect ||
-      handakutenFeedback?.isIncorrect)
+      handakutenFeedback?.isIncorrect ||
+      handakutenFeedback?.isCorrectAnswer)
 
   return (
     <div
@@ -209,14 +212,18 @@ function KanaCellButton({
             "bg-success text-success-foreground ring-2 ring-success scale-110",
           baseFeedback.isIncorrect &&
             "bg-destructive text-destructive-foreground ring-2 ring-destructive animate-shake",
+          baseFeedback.isCorrectAnswer &&
+            "bg-destructive text-destructive-foreground ring-2 ring-destructive scale-110",
           !baseFeedback.isCorrect &&
             !baseFeedback.isIncorrect &&
+            !baseFeedback.isCorrectAnswer &&
             "bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground",
           disabled &&
             !baseFeedback.isCorrect &&
             !baseFeedback.isIncorrect &&
+            !baseFeedback.isCorrectAnswer &&
             "opacity-70 cursor-not-allowed",
-          hasVariants && !baseFeedback.isCorrect && !baseFeedback.isIncorrect &&
+          hasVariants && !baseFeedback.isCorrect && !baseFeedback.isIncorrect && !baseFeedback.isCorrectAnswer &&
             "max-sm:ring-1 max-sm:ring-primary/20"
         )}
         aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}${hasVariants ? ". Mantener presionado para variantes" : ""}`}
@@ -302,7 +309,7 @@ function VariantButton({
   label,
 }: {
   entry: KanaEntry
-  feedback: { isCorrect: boolean; isIncorrect: boolean }
+  feedback: { isCorrect: boolean; isIncorrect: boolean; isCorrectAnswer: boolean }
   onClick: (entry: KanaEntry) => void
   disabled: boolean
   label: string
@@ -325,8 +332,11 @@ function VariantButton({
           "bg-success text-success-foreground border-success",
         feedback.isIncorrect &&
           "bg-destructive text-destructive-foreground border-destructive animate-shake",
+        feedback.isCorrectAnswer &&
+          "bg-destructive text-destructive-foreground border-destructive",
         !feedback.isCorrect &&
           !feedback.isIncorrect &&
+          !feedback.isCorrectAnswer &&
           "bg-card text-foreground border-border hover:bg-primary hover:text-primary-foreground hover:border-primary"
       )}
       aria-label={`Kana ${entry.kana}, romaji ${entry.romaji}`}

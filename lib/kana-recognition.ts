@@ -31,7 +31,7 @@ const DIR_BIN_THRESHOLD = 0.05 // direction bin above this fraction → 1
 const DILATE_BASE = 8 // radius for 1-stroke kana
 const DILATE_MIN = 3 // minimum radius for many-stroke kana
 
-export const MIN_SHAPE_SCORE = 0.55
+export const MIN_SHAPE_SCORE = 0.35
 
 export interface ShapeMatchResult {
   kana: string

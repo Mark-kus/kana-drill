@@ -20,6 +20,7 @@ interface DrawingCanvasProps {
   }) => void
   disabled: boolean
   feedbackType: "correct" | "incorrect" | null
+  showKanaShadow?: boolean
 }
 
 export function DrawingCanvas({
@@ -29,6 +30,7 @@ export function DrawingCanvas({
   onHintChange,
   disabled,
   feedbackType,
+  showKanaShadow,
 }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawingRef = useRef(false)
@@ -207,13 +209,21 @@ export function DrawingCanvas({
 
       const best = results[0]
 
-      // 4. Best match is the target with sufficient score → correct
-      if (best.kana === targetKana && best.score >= MIN_SHAPE_SCORE) {
+      // Find the target's score in results
+      const targetResult = results.find((r) => r.kana === targetKana)
+      const SCORE_TOLERANCE = 0.05
+
+      // 4. Target is within tolerance of the best score and above minimum → correct
+      if (
+        targetResult &&
+        targetResult.score >= MIN_SHAPE_SCORE &&
+        best.score - targetResult.score <= SCORE_TOLERANCE
+      ) {
         return { isCorrect: true, bestMatch: null, hint: null }
       }
 
-      // 5. Best match is the target but score too low
-      if (best.kana === targetKana) {
+      // 5. Target matched strokes but score too low
+      if (targetResult && targetResult.score < MIN_SHAPE_SCORE) {
         return {
           isCorrect: false,
           bestMatch: null,
@@ -221,7 +231,7 @@ export function DrawingCanvas({
         }
       }
 
-      // 6. Best match is a different kana
+      // 6. Best match is a different kana (target too far from best or not in stroke matches)
       const targetIn = strokeMatches.some((c) => c.kana === targetKana)
       return {
         isCorrect: false,
@@ -239,22 +249,33 @@ export function DrawingCanvas({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <canvas
-        ref={canvasRef}
-        width={160}
-        height={160}
-        className={cn(
-          "w-40 h-40 rounded-2xl border-4 cursor-crosshair touch-none transition-all duration-300",
-          feedbackType === "correct"
-            ? "border-success bg-success/10"
-            : feedbackType === "incorrect"
-              ? "border-destructive bg-destructive/10"
-              : "border-border bg-card"
-        )}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      />
+      <div className="relative w-40 h-40">
+        {/* Target kana shown behind the drawing when asserting */}
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center text-7xl font-bold pointer-events-none select-none z-0",
+            (feedbackType === "correct" || showKanaShadow) ? "opacity-20" : "opacity-0"
+          )}
+        >
+          {targetKana}
+        </span>
+        <canvas
+          ref={canvasRef}
+          width={160}
+          height={160}
+          className={cn(
+            "absolute inset-0 w-40 h-40 rounded-2xl border-4 cursor-crosshair touch-none transition-all duration-300 z-10",
+            feedbackType === "correct"
+              ? "border-success bg-success/10"
+              : feedbackType === "incorrect"
+                ? "border-destructive bg-destructive/10"
+                : "border-border bg-card"
+          )}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        />
+      </div>
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground tabular-nums min-w-[4.5rem]">

@@ -6,6 +6,7 @@ import { QuizPrompt } from "@/components/quiz-prompt"
 import { DrawingCanvas } from "@/components/drawing-canvas"
 import { ModeSelector, type KanaMode } from "@/components/mode-selector"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { cn } from "@/lib/utils"
 import {
   HIRAGANA_CELLS,
   KATAKANA_CELLS,
@@ -33,6 +34,18 @@ export function KanaPractice() {
     bestMatchKana: string | null
     strokeHint: string | null
   }>({ bestMatchKana: null, strokeHint: null })
+  const [hintVisible, setHintVisible] = useState(false)
+
+  // Auto-fade the drawing hint after 5 seconds
+  useEffect(() => {
+    if (drawingHint.bestMatchKana || drawingHint.strokeHint) {
+      setHintVisible(true)
+      const id = setTimeout(() => setHintVisible(false), 5000)
+      return () => clearTimeout(id)
+    } else {
+      setHintVisible(false)
+    }
+  }, [drawingHint])
 
   // Timer state -- use refs for the tick logic to avoid stale closures
   const [totalElapsed, setTotalElapsed] = useState(0)
@@ -192,6 +205,26 @@ export function KanaPractice() {
     }, 1000)
   }, [isProcessing, currentKana, getRandomKana, restartKanaTimer])
 
+  const handleGiveUp = useCallback(() => {
+    if (isProcessing) return
+    setIsProcessing(true)
+    setTotal((prev) => prev + 1)
+    setStreak(0)
+    setFeedbackType("incorrect")
+    setFeedbackKana(null)
+    setCorrectKana(currentKana.kana)
+
+    restartKanaTimer(MAX_KANA_TIME)
+
+    setTimeout(() => {
+      setFeedbackKana(null)
+      setFeedbackType(null)
+      setCorrectKana(null)
+      setCurrentKana(getRandomKana(currentKana.romaji))
+      setIsProcessing(false)
+    }, 1500)
+  }, [isProcessing, currentKana, getRandomKana, restartKanaTimer])
+
   // Computed values
   const avgTime =
     kanaTimes.length > 0
@@ -252,7 +285,7 @@ export function KanaPractice() {
               {/* Romaji + Drawing side by side */}
               <div className="flex flex-row items-start justify-center gap-6 mt-4">
                 {/* Romaji box */}
-                <div className="relative flex w-40 flex-col items-center">
+                <div className="flex w-40 flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                     Romaji
                   </p>
@@ -269,9 +302,30 @@ export function KanaPractice() {
                       {currentKana.romaji}
                     </span>
                   </div>
+                  <div className="flex items-center justify-center mt-2">
+                    <button
+                      onClick={handleGiveUp}
+                      disabled={isProcessing}
+                      className={cn(
+                        "px-2 py-1 text-xs rounded-md transition-colors",
+                        "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      Pasar
+                    </button>
+                  </div>
+                </div>
 
+                {/* Drawing canvas */}
+                <div className="relative flex flex-col items-center">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                    Dibuja el kana
+                  </p>
+
+                  {/* Hint tooltip – positioned to the left of the canvas, overlapping romaji */}
                   {(drawingHint.bestMatchKana || drawingHint.strokeHint) && (
-                    <div className="absolute left-0 top-full mt-3 w-52 rounded-lg border border-border bg-popover px-3 py-2 text-left shadow-sm">
+                    <div className={`absolute right-full top-1/2 -translate-y-1/2 mr-3 z-10 w-44 rounded-lg border border-border bg-popover px-3 py-2 text-left shadow-md transition-opacity duration-500 ${hintVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
                       {drawingHint.bestMatchKana && (
                         <p className="text-sm text-foreground">
                           Mejor coincidencia: <span className="text-xl font-bold leading-none">{drawingHint.bestMatchKana}</span>
@@ -282,15 +336,12 @@ export function KanaPractice() {
                           {drawingHint.strokeHint}
                         </p>
                       )}
+                      {/* Arrow pointing right */}
+                      <div className="absolute top-1/2 left-full -translate-y-1/2 w-0 h-0 border-y-[6px] border-y-transparent border-l-[6px] border-l-border" />
+                      <div className="absolute top-1/2 left-full -translate-y-1/2 -ml-px w-0 h-0 border-y-[5px] border-y-transparent border-l-[5px] border-l-popover" />
                     </div>
                   )}
-                </div>
 
-                {/* Drawing canvas */}
-                <div className="flex flex-col items-center">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                    Dibuja el kana
-                  </p>
                   <DrawingCanvas
                     targetKana={currentKana.kana}
                     candidateKanas={candidateKanas}
@@ -298,6 +349,7 @@ export function KanaPractice() {
                     onHintChange={setDrawingHint}
                     disabled={isProcessing}
                     feedbackType={feedbackType}
+                    showKanaShadow={correctKana !== null}
                   />
                 </div>
               </div>
