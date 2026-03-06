@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import type { KanaStrokeRange } from "@/lib/kana-data"
 import { matchDrawingShape, MIN_SHAPE_SCORE } from "@/lib/kana-recognition"
+import { useLanguage } from "@/components/language-provider"
 
 interface CandidateKana {
   kana: string
@@ -32,6 +33,7 @@ export function DrawingCanvas({
   feedbackType,
   showKanaShadow,
 }: DrawingCanvasProps) {
+  const { t } = useLanguage()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
@@ -152,8 +154,8 @@ export function DrawingCanvas({
         if (!targetEntry) return null
         const { min, max } = targetEntry.strokeRange
         const range = min === max ? `${min}` : `${min}–${max}`
-        if (strokes < min) return `Intenta con más trazos (${range})`
-        if (strokes > max) return `Intenta con menos trazos (${range})`
+        if (strokes < min) return t.tryMoreStrokes(range)
+        if (strokes > max) return t.tryFewerStrokes(range)
         return null
       }
 
@@ -227,7 +229,7 @@ export function DrawingCanvas({
         return {
           isCorrect: false,
           bestMatch: null,
-          hint: "Intenta dibujar con más precisión",
+          hint: t.tryMorePrecision,
         }
       }
 
@@ -279,7 +281,7 @@ export function DrawingCanvas({
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground tabular-nums min-w-[4.5rem]">
-          {strokeCount} {strokeCount === 1 ? "trazo" : "trazos"}
+          {strokeCount} {strokeCount === 1 ? t.stroke : t.strokes}
         </span>
         <button
           onClick={clearCanvas}
@@ -290,7 +292,7 @@ export function DrawingCanvas({
             "disabled:opacity-50 disabled:cursor-not-allowed"
           )}
         >
-          Borrar
+          {t.clear}
         </button>
       </div>
     </div>

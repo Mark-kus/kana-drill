@@ -6,6 +6,8 @@ import { QuizPrompt } from "@/components/quiz-prompt"
 import { DrawingCanvas } from "@/components/drawing-canvas"
 import { ModeSelector, type KanaMode } from "@/components/mode-selector"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { LanguageToggle } from "@/components/language-toggle"
+import { useLanguage } from "@/components/language-provider"
 import { cn } from "@/lib/utils"
 import {
   HIRAGANA_CELLS,
@@ -18,6 +20,7 @@ import {
 const MAX_KANA_TIME = 20 // seconds
 
 export function KanaPractice() {
+  const { t } = useLanguage()
   const [mode, setMode] = useState<KanaMode>("hiragana")
   const [score, setScore] = useState(0)
   const [total, setTotal] = useState(0)
@@ -240,7 +243,7 @@ export function KanaPractice() {
   if (!mounted) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <span className="text-muted-foreground text-lg">Cargando...</span>
+        <span className="text-muted-foreground text-lg">{t.loading}</span>
       </div>
     )
   }
@@ -261,6 +264,7 @@ export function KanaPractice() {
           <div className="flex items-center gap-3">
             <ModeSelector mode={mode} onModeChange={setMode} />
             <ThemeToggle />
+            <LanguageToggle />
           </div>
         </div>
       </header>
@@ -272,7 +276,7 @@ export function KanaPractice() {
           <div className="w-full lg:w-auto lg:sticky lg:top-8 flex flex-col items-center">
             <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
               <h2 className="text-lg font-bold text-foreground text-center mb-4">
-                {"Cual es el kana correcto?"}
+                {t.quizQuestion}
               </h2>
 
               {/* Scores + timers stacked */}
@@ -287,7 +291,7 @@ export function KanaPractice() {
                 {/* Romaji box */}
                 <div className="flex w-40 flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                    Romaji
+                    {t.romaji}
                   </p>
                   <div
                     className={`flex items-center justify-center w-40 h-40 rounded-2xl border-4 transition-all duration-300 ${
@@ -312,7 +316,7 @@ export function KanaPractice() {
                         "disabled:opacity-50 disabled:cursor-not-allowed"
                       )}
                     >
-                      Pasar
+                      {t.skip}
                     </button>
                   </div>
                 </div>
@@ -320,7 +324,7 @@ export function KanaPractice() {
                 {/* Drawing canvas */}
                 <div className="relative flex flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                    Dibuja el kana
+                    {t.drawKana}
                   </p>
 
                   {/* Hint tooltip – positioned to the left of the canvas, overlapping romaji */}
@@ -328,7 +332,7 @@ export function KanaPractice() {
                     <div className={`absolute right-full top-1/2 -translate-y-1/2 mr-3 z-10 w-44 rounded-lg border border-border bg-popover px-3 py-2 text-left shadow-md transition-opacity duration-500 ${hintVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
                       {drawingHint.bestMatchKana && (
                         <p className="text-sm text-foreground">
-                          Mejor coincidencia: <span className="text-xl font-bold leading-none">{drawingHint.bestMatchKana}</span>
+                          {t.bestMatch} <span className="text-xl font-bold leading-none">{drawingHint.bestMatchKana}</span>
                         </p>
                       )}
                       {drawingHint.strokeHint && (
