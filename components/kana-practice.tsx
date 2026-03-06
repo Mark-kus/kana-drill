@@ -38,6 +38,7 @@ export function KanaPractice() {
     strokeHint: string | null
   }>({ bestMatchKana: null, strokeHint: null })
   const [hintVisible, setHintVisible] = useState(false)
+  const quizRef = useRef<HTMLDivElement>(null)
 
   // Auto-fade the drawing hint after 5 seconds
   useEffect(() => {
@@ -165,6 +166,16 @@ export function KanaPractice() {
         const time = Math.min(kanaElapsedRef.current, MAX_KANA_TIME)
         restartKanaTimer(time)
 
+        // On mobile, scroll back to the quiz area after a short delay
+        // so the feedback is visible before scrolling
+        if (window.innerWidth < 1024 && quizRef.current) {
+          const el = quizRef.current
+          setTimeout(() => {
+            const top = el.getBoundingClientRect().top + window.scrollY
+            window.scrollTo({ top, behavior: "smooth" })
+          }, 100)
+        }
+
         setTimeout(() => {
           setFeedbackKana(null)
           setFeedbackType(null)
@@ -273,7 +284,7 @@ export function KanaPractice() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           {/* Left side: Quiz prompt */}
-          <div className="w-full lg:w-auto lg:sticky lg:top-8 flex flex-col items-center">
+          <div ref={quizRef} className="w-full lg:w-auto lg:sticky lg:top-8 flex flex-col items-center">
             <div className="bg-card rounded-xl border border-border p-3 sm:p-6 shadow-sm w-full sm:w-fit mx-auto">
               <h2 className="text-lg font-bold text-foreground text-center mb-4">
                 {t.quizQuestion}
