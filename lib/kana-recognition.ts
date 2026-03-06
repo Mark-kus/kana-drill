@@ -53,7 +53,7 @@ export function matchDrawingShape(
   const results: ShapeMatchResult[] = []
   for (const kana of candidates) {
     const ref = getKanaProfile(kana)
-    const score = cosineSimilarity(userProfile, ref)
+    const score = jaccardSimilarity(userProfile, ref)
     results.push({ kana, score })
   }
 
@@ -248,15 +248,14 @@ function computeZoneDensity(
 
 // ── Similarity ───────────────────────────────────────────────────
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0
-  let normA = 0
-  let normB = 0
+/** Jaccard index for binary vectors: |A∩B| / |A∪B| */
+function jaccardSimilarity(a: number[], b: number[]): number {
+  let intersection = 0
+  let union = 0
   for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i]
-    normA += a[i] * a[i]
-    normB += b[i] * b[i]
+    if (a[i] || b[i]) union++
+    if (a[i] && b[i]) intersection++
   }
-  if (normA === 0 || normB === 0) return 0
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB))
+  if (union === 0) return 0
+  return intersection / union
 }
