@@ -1,22 +1,26 @@
 /**
- * Zone-density kana recognition.
+ * Multi-resolution zone-density kana recognition.
  *
  * Instead of comparing raw pixels (filled glyph vs thin strokes),
- * we divide each image into a ZONES×ZONES grid, compute the ink
- * density (0-1) per zone, and compare the resulting vectors using
- * cosine similarity.  This abstracts away fill-vs-stroke differences
- * because the *spatial distribution* of ink is what matters.
+ * we divide each image into grids at multiple resolutions, compute
+ * the ink density per zone, binarize, concatenate the vectors, and
+ * compare using Jaccard similarity.
+ *
+ * Multi-resolution: a coarse grid (5×5) captures overall structure
+ * while a fine grid (10×10) discriminates details. The concatenated
+ * binary vector (25 + 100 = 125 dims) is compared as a single unit.
  *
  * Flow:
  * 1. Render reference kana on an offscreen canvas
  * 2. For both reference and user drawing:
  *    a. Find bounding box of ink pixels
  *    b. Normalize to square (center shorter axis)
- *    c. Divide into ZONES×ZONES grid, compute density per zone
- * 3. Compare density vectors with cosine similarity
+ *    c. At each resolution, divide into NxN grid, compute density
+ *    d. Binarize and concatenate all resolutions
+ * 3. Compare concatenated binary vectors with Jaccard similarity
  */
 
-const ZONES = 7 // 7×7 = 49-dimensional density vector
+const ZONE_LEVELS = [5, 10] // coarse (5×5=25) + fine (10×10=100) = 125 dims
 const RENDER_SIZE = 128
 const ALPHA_THRESHOLD = 30
 const USER_DILATE_RADIUS = 6 // fatten user strokes before density calc
@@ -75,11 +79,11 @@ function getKanaProfile(kana: string): number[] {
   ctx.fillStyle = "black"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  ctx.font = `bold ${Math.round(RENDER_SIZE * 0.82)}px ${getJapaneseFont()}`
+  ctx.font = `${Math.round(RENDER_SIZE * 0.82)}px ${getJapaneseFont()}`
   ctx.fillText(kana, RENDER_SIZE / 2, RENDER_SIZE / 2)
 
   const { data } = ctx.getImageData(0, 0, RENDER_SIZE, RENDER_SIZE)
-  const profile = computeZoneDensity(data, RENDER_SIZE, RENDER_SIZE)
+  const profile = computeMultiResProfile(data, RENDER_SIZE, RENDER_SIZE)
 
   kanaProfileCache.set(kana, profile)
   return profile
@@ -122,7 +126,7 @@ function extractDensityProfile(
   // zone density to the filled reference glyphs
   const dilated = dilateImageAlpha(data, w, h, USER_DILATE_RADIUS)
 
-  return computeZoneDensity(dilated, w, h)
+  return computeMultiResProfile(dilated, w, h)
 }
 
 // ── Dilation ─────────────────────────────────────────────────────
@@ -167,12 +171,13 @@ function dilateImageAlpha(
 // ── Zone density computation ─────────────────────────────────────
 
 /**
+ * Compute a multi-resolution binary density profile:
  * 1. Find bounding box of ink pixels
- * 2. Pad slightly, then extend to a square (centering the short axis)
- * 3. Divide the square into ZONES×ZONES cells
- * 4. For each cell compute density = inkPixels / totalPixels
+ * 2. Pad + extend to a square (centering the short axis)
+ * 3. For each resolution level, divide into NxN grid, compute
+ *    zone density, binarize, and append to the output vector
  */
-function computeZoneDensity(
+function computeMultiResProfile(
   data: Uint8ClampedArray,
   width: number,
   height: number
@@ -194,8 +199,8 @@ function computeZoneDensity(
     }
   }
 
-  const empty = new Array<number>(ZONES * ZONES).fill(0)
-  if (maxX < minX) return empty
+  const totalDims = ZONE_LEVELS.reduce((s, z) => s + z * z, 0)
+  if (maxX < minX) return new Array<number>(totalDims).fill(0)
 
   // Small padding
   const bboxW = maxX - minX + 1
@@ -213,36 +218,39 @@ function computeZoneDensity(
   const originX = minX - Math.round((side - w2) / 2)
   const originY = minY - Math.round((side - h2) / 2)
 
-  // Accumulate per-zone
-  const zoneInk = new Array<number>(ZONES * ZONES).fill(0)
-  const zoneTotal = new Array<number>(ZONES * ZONES).fill(0)
+  // Build concatenated profile across all resolution levels
+  const profile: number[] = []
 
-  for (let sy = 0; sy < side; sy++) {
-    const srcY = originY + sy
-    const zy = Math.min(Math.floor((sy / side) * ZONES), ZONES - 1)
+  for (const zones of ZONE_LEVELS) {
+    const zoneInk = new Array<number>(zones * zones).fill(0)
+    const zoneTotal = new Array<number>(zones * zones).fill(0)
 
-    for (let sx = 0; sx < side; sx++) {
-      const srcX = originX + sx
-      const zx = Math.min(Math.floor((sx / side) * ZONES), ZONES - 1)
-      const zi = zy * ZONES + zx
+    for (let sy = 0; sy < side; sy++) {
+      const srcY = originY + sy
+      const zy = Math.min(Math.floor((sy / side) * zones), zones - 1)
 
-      zoneTotal[zi]++
-      if (
-        srcX >= 0 && srcX < width &&
-        srcY >= 0 && srcY < height &&
-        data[(srcY * width + srcX) * 4 + 3] > ALPHA_THRESHOLD
-      ) {
-        zoneInk[zi]++
+      for (let sx = 0; sx < side; sx++) {
+        const srcX = originX + sx
+        const zx = Math.min(Math.floor((sx / side) * zones), zones - 1)
+        const zi = zy * zones + zx
+
+        zoneTotal[zi]++
+        if (
+          srcX >= 0 && srcX < width &&
+          srcY >= 0 && srcY < height &&
+          data[(srcY * width + srcX) * 4 + 3] > ALPHA_THRESHOLD
+        ) {
+          zoneInk[zi]++
+        }
       }
+    }
+
+    for (let i = 0; i < zones * zones; i++) {
+      const raw = zoneTotal[i] > 0 ? zoneInk[i] / zoneTotal[i] : 0
+      profile.push(raw >= DENSITY_BIN_THRESHOLD ? 1 : 0)
     }
   }
 
-  // Density ratio per zone, then binarize
-  const profile = new Array<number>(ZONES * ZONES)
-  for (let i = 0; i < ZONES * ZONES; i++) {
-    const raw = zoneTotal[i] > 0 ? zoneInk[i] / zoneTotal[i] : 0
-    profile[i] = raw >= DENSITY_BIN_THRESHOLD ? 1 : 0
-  }
   return profile
 }
 
