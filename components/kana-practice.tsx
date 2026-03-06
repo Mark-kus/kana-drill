@@ -274,7 +274,7 @@ export function KanaPractice() {
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           {/* Left side: Quiz prompt */}
           <div className="w-full lg:w-auto lg:sticky lg:top-8 flex flex-col items-center">
-            <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+            <div className="bg-card rounded-xl border border-border p-3 sm:p-6 shadow-sm w-full sm:w-fit mx-auto">
               <h2 className="text-lg font-bold text-foreground text-center mb-4">
                 {t.quizQuestion}
               </h2>
@@ -287,14 +287,14 @@ export function KanaPractice() {
               />
 
               {/* Romaji + Drawing side by side */}
-              <div className="flex flex-row items-start justify-center gap-6 mt-4">
+              <div className="flex flex-row items-start justify-center gap-3 sm:gap-6 mt-4">
                 {/* Romaji box */}
-                <div className="flex w-40 flex-col items-center">
+                <div className="flex w-[130px] sm:w-40 flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                     {t.romaji}
                   </p>
                   <div
-                    className={`flex items-center justify-center w-40 h-40 rounded-2xl border-4 transition-all duration-300 ${
+                    className={`flex items-center justify-center w-[130px] h-[130px] sm:w-40 sm:h-40 rounded-2xl border-4 transition-all duration-300 ${
                       feedbackType === "correct"
                         ? "border-success bg-success/10 scale-105"
                         : feedbackType === "incorrect"
@@ -302,7 +302,7 @@ export function KanaPractice() {
                           : "border-border bg-card"
                     }`}
                   >
-                    <span className="text-5xl font-bold text-foreground tracking-wider">
+                    <span className="text-4xl sm:text-5xl font-bold text-foreground tracking-wider">
                       {currentKana.romaji}
                     </span>
                   </div>
@@ -362,6 +362,10 @@ export function KanaPractice() {
 
           {/* Right side: Kana grid */}
           <div className="flex-1 w-full min-w-0">
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              <span className="hidden sm:inline">{t.kanaHintDesktop}</span>
+              <span className="sm:hidden">{t.kanaHintMobile}</span>
+            </p>
             <KanaTable
               cells={cells}
               onKanaClick={handleKanaClick}

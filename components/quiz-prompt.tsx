@@ -17,8 +17,8 @@ export function QuizPrompt({
   return (
     <div className="flex flex-col items-center gap-3 w-full">
       {/* Score row */}
-      <div className="flex items-center justify-center gap-6">
-        <div className="w-40 text-center">
+      <div className="flex items-center justify-center gap-4 sm:gap-6">
+        <div className="text-center">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {t.correct}
           </p>
@@ -30,7 +30,7 @@ export function QuizPrompt({
           </p>
           <p className="text-xl font-bold text-foreground">{total}</p>
         </div>
-        <div className="w-40 text-center">
+        <div className="text-center">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {t.streak}
           </p>

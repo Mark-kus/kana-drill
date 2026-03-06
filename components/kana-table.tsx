@@ -68,7 +68,9 @@ function KanaCellButton({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const didLongPress = useRef(false)
+  const isTouching = useRef(false)
   const hasVariants = !!cell.dakuten || !!cell.handakuten
 
   const LONG_PRESS_DURATION = 400 // ms
@@ -111,12 +113,16 @@ function KanaCellButton({
   useEffect(() => {
     if (!isLongPressed) return
     const handleOutside = (e: MouseEvent | TouchEvent) => {
+      // Don't close if the touch/click is inside this cell (e.g. on variant buttons)
+      if (containerRef.current && containerRef.current.contains(e.target as Node)) {
+        return
+      }
       setIsLongPressed(false)
     }
     // Delay to avoid immediately closing
     const timer = setTimeout(() => {
-      document.addEventListener("touchstart", handleOutside, { once: true })
-      document.addEventListener("mousedown", handleOutside, { once: true })
+      document.addEventListener("touchstart", handleOutside)
+      document.addEventListener("mousedown", handleOutside)
     }, 50)
     return () => {
       clearTimeout(timer)
@@ -127,6 +133,7 @@ function KanaCellButton({
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      isTouching.current = true
       const touch = e.touches[0]
       touchStartPos.current = { x: touch.clientX, y: touch.clientY }
       startLongPress()
@@ -153,6 +160,8 @@ function KanaCellButton({
       if (didLongPress.current) {
         e.preventDefault() // prevent click after long press
       }
+      // Clear touch flag after a short delay to suppress the synthetic mouseenter
+      setTimeout(() => { isTouching.current = false }, 100)
     },
     [cancelLongPress]
   )
@@ -190,8 +199,9 @@ function KanaCellButton({
 
   return (
     <div
+      ref={containerRef}
       className="relative"
-      onMouseEnter={() => setIsHovered(true)}
+      onMouseEnter={() => { if (!isTouching.current) setIsHovered(true) }}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Base kana button */}
@@ -205,7 +215,7 @@ function KanaCellButton({
         }}
         disabled={disabled}
         className={cn(
-          "w-full aspect-square rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-medium transition-all duration-200 relative overflow-hidden",
+          "w-full aspect-square rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-medium transition-all duration-200 relative overflow-hidden select-none",
           "hover:scale-105 active:scale-95",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           baseFeedback.isCorrect &&
@@ -325,7 +335,7 @@ function VariantButton({
       }}
       disabled={disabled}
       className={cn(
-        "w-11 h-11 sm:w-10 sm:h-10 rounded-md flex items-center justify-center text-lg sm:text-base font-medium shadow-md border transition-all duration-150",
+        "w-11 h-11 sm:w-10 sm:h-10 rounded-md flex items-center justify-center text-lg sm:text-base font-medium shadow-md border transition-all duration-150 select-none",
         "hover:scale-110 active:scale-95",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         feedback.isCorrect &&

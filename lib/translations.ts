@@ -25,6 +25,8 @@ export const translations = {
     themeNameDark: "dark",
     themeNameLight: "light",
     langLabel: "EN",
+    kanaHintDesktop: "Click to select · Hover for dakuten / handakuten",
+    kanaHintMobile: "Tap to select · Long press for dakuten / handakuten",
   },
   es: {
     loading: "Cargando...",
@@ -50,6 +52,8 @@ export const translations = {
     themeNameDark: "oscuro",
     themeNameLight: "claro",
     langLabel: "ES",
+    kanaHintDesktop: "Clic para seleccionar · Hover para dakuten / handakuten",
+    kanaHintMobile: "Toca para seleccionar · Mantén presionado para dakuten / handakuten",
   },
   pt: {
     loading: "Carregando...",
@@ -75,6 +79,8 @@ export const translations = {
     themeNameDark: "escuro",
     themeNameLight: "claro",
     langLabel: "PT",
+    kanaHintDesktop: "Clique para selecionar · Hover para dakuten / handakuten",
+    kanaHintMobile: "Toque para selecionar · Pressione e segure para dakuten / handakuten",
   },
 } as const
 
