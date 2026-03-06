@@ -24,9 +24,9 @@ export const translations = {
     themeNameSystem: "system",
     themeNameDark: "dark",
     themeNameLight: "light",
-    langLabel: "EN",
     kanaHintDesktop: "Click to select · Hover for dakuten / handakuten",
     kanaHintMobile: "Tap to select · Long press for dakuten / handakuten",
+    longPressForVariants: "Long press for variants",
   },
   es: {
     loading: "Cargando...",
@@ -51,9 +51,9 @@ export const translations = {
     themeNameSystem: "sistema",
     themeNameDark: "oscuro",
     themeNameLight: "claro",
-    langLabel: "ES",
     kanaHintDesktop: "Clic para seleccionar · Hover para dakuten / handakuten",
     kanaHintMobile: "Toca para seleccionar · Mantén presionado para dakuten / handakuten",
+    longPressForVariants: "Mantener presionado para variantes",
   },
   pt: {
     loading: "Carregando...",
@@ -78,36 +78,16 @@ export const translations = {
     themeNameSystem: "sistema",
     themeNameDark: "escuro",
     themeNameLight: "claro",
-    langLabel: "PT",
     kanaHintDesktop: "Clique para selecionar · Hover para dakuten / handakuten",
     kanaHintMobile: "Toque para selecionar · Pressione e segure para dakuten / handakuten",
+    longPressForVariants: "Pressione e segure para variantes",
   },
 } as const
 
-export type Translations = {
-  loading: string
-  quizQuestion: string
-  romaji: string
-  skip: string
-  drawKana: string
-  bestMatch: string
-  correct: string
-  total: string
-  streak: string
-  stroke: string
-  strokes: string
-  clear: string
-  tryMoreStrokes: (range: string) => string
-  tryFewerStrokes: (range: string) => string
-  tryMorePrecision: string
-  themeSystem: string
-  themeDark: string
-  themeLight: string
-  themeAriaLabel: (current: string) => string
-  themeNameSystem: string
-  themeNameDark: string
-  themeNameLight: string
-  langLabel: string
-  kanaHintDesktop: string
-  kanaHintMobile: string
+type WidenLiterals<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? (...args: A) => R
+    : T[K] extends string ? string : T[K]
 }
+
+export type Translations = WidenLiterals<typeof translations.en>

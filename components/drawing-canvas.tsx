@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils"
 import { evaluateDrawing, type CandidateKana } from "@/lib/kana-recognition"
 import { useLanguage } from "@/components/language-provider"
 
+const CANVAS_SIZE = 160
+const AUTO_VERIFY_DELAY_MS = 1000
+
 interface DrawingCanvasProps {
   targetKana: string
   candidateKanas: CandidateKana[]
@@ -35,12 +38,28 @@ export function DrawingCanvas({
   const [hasDrawn, setHasDrawn] = useState(false)
   const autoVerifyRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const strokeCountRef = useRef(0)
+  const strokeColorRef = useRef<string | null>(null)
 
-  const getStrokeColor = () => {
-    const style = getComputedStyle(document.documentElement)
-    const fg = style.getPropertyValue("--foreground").trim()
-    return fg ? `hsl(${fg})` : "#1a1a2e"
-  }
+  // Cache the stroke color and update it when the theme changes
+  useEffect(() => {
+    const updateColor = () => {
+      const fg = getComputedStyle(document.documentElement)
+        .getPropertyValue("--foreground")
+        .trim()
+      strokeColorRef.current = fg ? `hsl(${fg})` : "#1a1a2e"
+    }
+    updateColor()
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    mq.addEventListener("change", updateColor)
+    const observer = new MutationObserver(updateColor)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => {
+      mq.removeEventListener("change", updateColor)
+      observer.disconnect()
+    }
+  }, [])
+
+  const getStrokeColor = () => strokeColorRef.current ?? "#1a1a2e"
 
   const clearAutoVerify = useCallback(() => {
     if (autoVerifyRef.current) {
@@ -145,7 +164,7 @@ export function DrawingCanvas({
           strokeHint: translateHint(result),
         })
       }
-    }, 1000)
+    }, AUTO_VERIFY_DELAY_MS)
   }
 
   // Cancel pending auto-verify on unmount
@@ -167,8 +186,8 @@ export function DrawingCanvas({
         </span>
         <canvas
           ref={canvasRef}
-          width={160}
-          height={160}
+          width={CANVAS_SIZE}
+          height={CANVAS_SIZE}
           className={cn(
             "absolute inset-0 w-full h-full rounded-2xl border-4 cursor-crosshair touch-none transition-all duration-300 z-10",
             feedbackType === "correct"

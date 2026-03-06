@@ -3,8 +3,9 @@
 import { useState, useMemo, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import type { KanaEntry, KanaCell } from "@/lib/kana-data"
-import { shuffleArray } from "@/lib/kana-data"
+import { shuffleArray } from "@/lib/utils"
 import { useLongPress } from "@/hooks/use-long-press"
+import { useLanguage } from "@/components/language-provider"
 
 interface KanaTableProps {
   cells: KanaCell[]
@@ -25,11 +26,8 @@ export function KanaTable({
   disabled,
   shuffleSeed,
 }: KanaTableProps) {
-  // shuffleSeed is not used directly — its value change triggers a re-shuffle via the dependency array
-  const shuffledCells = useMemo(() => {
-    void shuffleSeed
-    return shuffleArray(cells)
-  }, [cells, shuffleSeed])
+  // shuffleSeed change triggers a re-shuffle via the dependency array
+  const shuffledCells = useMemo(() => shuffleArray(cells), [cells, shuffleSeed])
 
   return (
     <div className="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-9 gap-1.5">
@@ -63,6 +61,7 @@ function KanaCellButton({
   correctKana: string | null
   disabled: boolean
 }) {
+  const { t } = useLanguage()
   const [isHovered, setIsHovered] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const hasVariants = !!cell.dakuten || !!cell.handakuten
@@ -151,7 +150,7 @@ function KanaCellButton({
             !baseFeedback.isCorrectAnswer &&
             "max-sm:ring-1 max-sm:ring-primary/20",
         )}
-        aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}${hasVariants ? ". Mantener presionado para variantes" : ""}`}
+        aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}${hasVariants ? `. ${t.longPressForVariants}` : ""}`}
       >
         {cell.base.kana}
 

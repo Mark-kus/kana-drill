@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import {
   HIRAGANA_CELLS,
   KATAKANA_CELLS,
@@ -11,7 +11,14 @@ import {
 import type { CandidateKana } from "@/lib/kana-recognition"
 import type { KanaMode } from "@/components/mode-selector"
 
+const CORRECT_CLICK_DELAY = 600
+const INCORRECT_CLICK_DELAY = 800
+const CORRECT_DRAWING_DELAY = 1000
+const GIVE_UP_DELAY = 1500
+
 export function useQuizState() {
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [mode, setMode] = useState<KanaMode>("hiragana")
   const [score, setScore] = useState(0)
   const [total, setTotal] = useState(0)
@@ -54,6 +61,7 @@ export function useQuizState() {
   // Reset quiz state when mode changes
   useEffect(() => {
     if (!mounted) return
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
     setCurrentKana(getRandomKana())
     setScore(0)
     setTotal(0)
@@ -65,6 +73,13 @@ export function useQuizState() {
     setShuffleSeed(Date.now())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
+
+  // Cleanup pending feedback timer on unmount
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current)
+    }
+  }, [])
 
   const handleKanaClick = useCallback(
     (entry: KanaEntry) => {
@@ -80,23 +95,23 @@ export function useQuizState() {
         setFeedbackType("correct")
         setCorrectKana(null)
 
-        setTimeout(() => {
+        feedbackTimerRef.current = setTimeout(() => {
           setFeedbackKana(null)
           setFeedbackType(null)
           setCurrentKana(getRandomKana(currentKana.romaji))
           setIsProcessing(false)
-        }, 600)
+        }, CORRECT_CLICK_DELAY)
       } else {
         setStreak(0)
         setFeedbackKana(entry.kana)
         setFeedbackType("incorrect")
         setCorrectKana(null)
 
-        setTimeout(() => {
+        feedbackTimerRef.current = setTimeout(() => {
           setFeedbackKana(null)
           setFeedbackType(null)
           setIsProcessing(false)
-        }, 800)
+        }, INCORRECT_CLICK_DELAY)
       }
     },
     [isProcessing, currentKana, getRandomKana],
@@ -112,12 +127,12 @@ export function useQuizState() {
     setFeedbackKana(currentKana.kana)
     setCorrectKana(null)
 
-    setTimeout(() => {
+    feedbackTimerRef.current = setTimeout(() => {
       setFeedbackKana(null)
       setFeedbackType(null)
       setCurrentKana(getRandomKana(currentKana.romaji))
       setIsProcessing(false)
-    }, 1000)
+    }, CORRECT_DRAWING_DELAY)
   }, [isProcessing, currentKana, getRandomKana])
 
   const handleGiveUp = useCallback(() => {
@@ -129,13 +144,13 @@ export function useQuizState() {
     setFeedbackKana(null)
     setCorrectKana(currentKana.kana)
 
-    setTimeout(() => {
+    feedbackTimerRef.current = setTimeout(() => {
       setFeedbackKana(null)
       setFeedbackType(null)
       setCorrectKana(null)
       setCurrentKana(getRandomKana(currentKana.romaji))
       setIsProcessing(false)
-    }, 1500)
+    }, GIVE_UP_DELAY)
   }, [isProcessing, currentKana, getRandomKana])
 
   return {

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { KanaTable } from "@/components/kana-table"
 import { QuizPrompt } from "@/components/quiz-prompt"
 import { DrawingCanvas } from "@/components/drawing-canvas"
+import { DrawingHintTooltip } from "@/components/drawing-hint-tooltip"
 import { ModeSelector } from "@/components/mode-selector"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageToggle } from "@/components/language-toggle"
@@ -11,6 +12,10 @@ import { useLanguage } from "@/components/language-provider"
 import { cn } from "@/lib/utils"
 import { useQuizState } from "@/hooks/use-quiz-state"
 import type { KanaEntry } from "@/lib/kana-data"
+
+const HINT_FADE_MS = 5000
+const MOBILE_BREAKPOINT = 1024
+const SCROLL_DELAY_MS = 100
 
 export function KanaPractice() {
   const { t } = useLanguage()
@@ -27,7 +32,7 @@ export function KanaPractice() {
   useEffect(() => {
     if (drawingHint.bestMatchKana || drawingHint.strokeHint) {
       setHintVisible(true)
-      const id = setTimeout(() => setHintVisible(false), 5000)
+      const id = setTimeout(() => setHintVisible(false), HINT_FADE_MS)
       return () => clearTimeout(id)
     } else {
       setHintVisible(false)
@@ -45,12 +50,12 @@ export function KanaPractice() {
       const isCorrect = entry.romaji === quiz.currentKana.romaji
       quiz.handleKanaClick(entry)
 
-      if (isCorrect && window.innerWidth < 1024 && quizRef.current) {
+      if (isCorrect && window.innerWidth < MOBILE_BREAKPOINT && quizRef.current) {
         const el = quizRef.current
         setTimeout(() => {
           const top = el.getBoundingClientRect().top + window.scrollY
           window.scrollTo({ top, behavior: "smooth" })
-        }, 100)
+        }, SCROLL_DELAY_MS)
       }
     },
     [quiz.handleKanaClick, quiz.currentKana.romaji],
@@ -134,27 +139,11 @@ export function KanaPractice() {
                     {t.drawKana}
                   </p>
 
-                  {/* Hint tooltip */}
-                  {(drawingHint.bestMatchKana || drawingHint.strokeHint) && (
-                    <div
-                      className={`absolute right-full top-1/2 -translate-y-1/2 mr-3 z-10 w-44 rounded-lg border border-border bg-popover px-3 py-2 text-left shadow-md transition-opacity duration-500 ${hintVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-                    >
-                      {drawingHint.bestMatchKana && (
-                        <p className="text-sm text-foreground">
-                          {t.bestMatch}{" "}
-                          <span className="text-xl font-bold leading-none">{drawingHint.bestMatchKana}</span>
-                        </p>
-                      )}
-                      {drawingHint.strokeHint && (
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          {drawingHint.strokeHint}
-                        </p>
-                      )}
-                      {/* Arrow pointing right */}
-                      <div className="absolute top-1/2 left-full -translate-y-1/2 w-0 h-0 border-y-[6px] border-y-transparent border-l-[6px] border-l-border" />
-                      <div className="absolute top-1/2 left-full -translate-y-1/2 -ml-px w-0 h-0 border-y-[5px] border-y-transparent border-l-[5px] border-l-popover" />
-                    </div>
-                  )}
+                  <DrawingHintTooltip
+                    bestMatchKana={drawingHint.bestMatchKana}
+                    strokeHint={drawingHint.strokeHint}
+                    visible={hintVisible}
+                  />
 
                   <DrawingCanvas
                     targetKana={quiz.currentKana.kana}
