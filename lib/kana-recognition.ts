@@ -19,6 +19,8 @@
 const ZONES = 7 // 7×7 = 49-dimensional density vector
 const RENDER_SIZE = 128
 const ALPHA_THRESHOLD = 30
+const USER_DILATE_RADIUS = 6 // fatten user strokes before density calc
+const DENSITY_BIN_THRESHOLD = 0.08 // zone density above this → 1, below → 0
 
 export const MIN_SHAPE_SCORE = 0.55
 
@@ -116,7 +118,50 @@ function extractDensityProfile(
   }
   if (!hasPixels) return null
 
-  return computeZoneDensity(data, w, h)
+  // Dilate (fatten) user strokes so thin lines produce comparable
+  // zone density to the filled reference glyphs
+  const dilated = dilateImageAlpha(data, w, h, USER_DILATE_RADIUS)
+
+  return computeZoneDensity(dilated, w, h)
+}
+
+// ── Dilation ─────────────────────────────────────────────────────
+
+/**
+ * Expand non-transparent pixels by `radius` using a circular kernel.
+ * Returns a new Uint8ClampedArray with dilated alpha values.
+ */
+function dilateImageAlpha(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(data.length)
+  // Copy RGB channels as-is; we only care about alpha for density
+  out.set(data)
+  const r2 = radius * radius
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] <= ALPHA_THRESHOLD) continue
+      // Spread this pixel's "ink" to its neighbours
+      const yMin = Math.max(0, y - radius)
+      const yMax = Math.min(height - 1, y + radius)
+      const xMin = Math.max(0, x - radius)
+      const xMax = Math.min(width - 1, x + radius)
+      for (let ny = yMin; ny <= yMax; ny++) {
+        const dy = ny - y
+        for (let nx = xMin; nx <= xMax; nx++) {
+          const dx = nx - x
+          if (dx * dx + dy * dy > r2) continue
+          const idx = (ny * width + nx) * 4 + 3
+          if (out[idx] < 255) out[idx] = 255
+        }
+      }
+    }
+  }
+  return out
 }
 
 // ── Zone density computation ─────────────────────────────────────
@@ -192,10 +237,11 @@ function computeZoneDensity(
     }
   }
 
-  // Density ratio per zone
+  // Density ratio per zone, then binarize
   const profile = new Array<number>(ZONES * ZONES)
   for (let i = 0; i < ZONES * ZONES; i++) {
-    profile[i] = zoneTotal[i] > 0 ? zoneInk[i] / zoneTotal[i] : 0
+    const raw = zoneTotal[i] > 0 ? zoneInk[i] / zoneTotal[i] : 0
+    profile[i] = raw >= DENSITY_BIN_THRESHOLD ? 1 : 0
   }
   return profile
 }
