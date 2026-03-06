@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useCallback, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import type { KanaEntry, KanaCell } from "@/lib/kana-data"
 import { shuffleArray } from "@/lib/kana-data"
@@ -63,7 +63,107 @@ function KanaCellButton({
   disabled: boolean
 }) {
   const [isHovered, setIsHovered] = useState(false)
+  const [isLongPressed, setIsLongPressed] = useState(false)
+  const [longPressProgress, setLongPressProgress] = useState(0)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+  const didLongPress = useRef(false)
   const hasVariants = !!cell.dakuten || !!cell.handakuten
+
+  const LONG_PRESS_DURATION = 400 // ms
+
+  const clearTimers = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    if (progressTimer.current) {
+      clearInterval(progressTimer.current)
+      progressTimer.current = null
+    }
+    setLongPressProgress(0)
+  }, [])
+
+  const startLongPress = useCallback(() => {
+    if (!hasVariants || disabled) return
+    didLongPress.current = false
+
+    const startTime = Date.now()
+    progressTimer.current = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      setLongPressProgress(Math.min(elapsed / LONG_PRESS_DURATION, 1))
+    }, 16)
+
+    longPressTimer.current = setTimeout(() => {
+      setIsLongPressed(true)
+      setLongPressProgress(0)
+      if (progressTimer.current) clearInterval(progressTimer.current)
+      didLongPress.current = true
+    }, LONG_PRESS_DURATION)
+  }, [hasVariants, disabled])
+
+  const cancelLongPress = useCallback(() => {
+    clearTimers()
+  }, [clearTimers])
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!isLongPressed) return
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      setIsLongPressed(false)
+    }
+    // Delay to avoid immediately closing
+    const timer = setTimeout(() => {
+      document.addEventListener("touchstart", handleOutside, { once: true })
+      document.addEventListener("mousedown", handleOutside, { once: true })
+    }, 50)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("touchstart", handleOutside)
+      document.removeEventListener("mousedown", handleOutside)
+    }
+  }, [isLongPressed])
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0]
+      touchStartPos.current = { x: touch.clientX, y: touch.clientY }
+      startLongPress()
+    },
+    [startLongPress]
+  )
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStartPos.current) return
+      const touch = e.touches[0]
+      const dx = touch.clientX - touchStartPos.current.x
+      const dy = touch.clientY - touchStartPos.current.y
+      if (Math.sqrt(dx * dx + dy * dy) > 10) {
+        cancelLongPress()
+      }
+    },
+    [cancelLongPress]
+  )
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      cancelLongPress()
+      if (didLongPress.current) {
+        e.preventDefault() // prevent click after long press
+      }
+    },
+    [cancelLongPress]
+  )
+
+  const handleClick = useCallback(() => {
+    if (didLongPress.current) {
+      didLongPress.current = false
+      return
+    }
+    onKanaClick(cell.base)
+  }, [onKanaClick, cell.base])
 
   const getFeedback = (entry: KanaEntry) => {
     const isCorrect = feedbackKana === entry.kana && feedbackType === "correct"
@@ -75,10 +175,11 @@ function KanaCellButton({
   const dakutenFeedback = cell.dakuten ? getFeedback(cell.dakuten) : null
   const handakutenFeedback = cell.handakuten ? getFeedback(cell.handakuten) : null
 
-  // Show variants if hovered or if any variant has active feedback
+  // Show variants if hovered (desktop) or long-pressed (mobile) or if any variant has active feedback
   const showVariants =
     hasVariants &&
     (isHovered ||
+      isLongPressed ||
       dakutenFeedback?.isCorrect ||
       dakutenFeedback?.isIncorrect ||
       handakutenFeedback?.isCorrect ||
@@ -92,10 +193,16 @@ function KanaCellButton({
     >
       {/* Base kana button */}
       <button
-        onClick={() => onKanaClick(cell.base)}
+        onClick={handleClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onContextMenu={(e) => {
+          if (hasVariants && "ontouchstart" in window) e.preventDefault()
+        }}
         disabled={disabled}
         className={cn(
-          "w-full aspect-square rounded-lg flex items-center justify-center text-xl sm:text-2xl font-medium transition-all duration-200",
+          "w-full aspect-square rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-medium transition-all duration-200 relative overflow-hidden",
           "hover:scale-105 active:scale-95",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           baseFeedback.isCorrect &&
@@ -108,21 +215,63 @@ function KanaCellButton({
           disabled &&
             !baseFeedback.isCorrect &&
             !baseFeedback.isIncorrect &&
-            "opacity-70 cursor-not-allowed"
+            "opacity-70 cursor-not-allowed",
+          hasVariants && !baseFeedback.isCorrect && !baseFeedback.isIncorrect &&
+            "max-sm:ring-1 max-sm:ring-primary/20"
         )}
-        aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}`}
+        aria-label={`Kana ${cell.base.kana}, romaji ${cell.base.romaji}${hasVariants ? ". Mantener presionado para variantes" : ""}`}
       >
         {cell.base.kana}
+
+        {/* Long-press progress indicator (fills from bottom) */}
+        {hasVariants && longPressProgress > 0 && (
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-primary/25 transition-none pointer-events-none"
+            style={{ height: `${longPressProgress * 100}%` }}
+          />
+        )}
       </button>
 
-      {/* Dakuten / Handakuten variant overlays */}
+      {/* Variant indicator — badges on mobile, subtle dots on desktop */}
+      {hasVariants && !showVariants && (
+        <>
+          {/* Mobile: prominent badges */}
+          <div className="absolute -top-1 -right-1 flex gap-px pointer-events-none sm:hidden">
+            {cell.dakuten && (
+              <span className="w-4 h-4 rounded-full bg-primary/80 text-primary-foreground flex items-center justify-center text-[8px] font-bold shadow-sm border border-background">
+                ゛
+              </span>
+            )}
+            {cell.handakuten && (
+              <span className="w-4 h-4 rounded-full bg-accent-foreground/70 text-accent flex items-center justify-center text-[8px] font-bold shadow-sm border border-background">
+                ゜
+              </span>
+            )}
+          </div>
+          {/* Desktop: original subtle dots */}
+          <div className="hidden sm:flex absolute top-1.5 right-1.5 gap-px">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+            {cell.handakuten && (
+              <div className="w-1.5 h-1.5 rounded-full bg-accent/40" />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Dakuten / Handakuten variant overlay (desktop hover + mobile long-press) */}
       {hasVariants && showVariants && (
-        <div className="absolute -top-2 -right-2 flex gap-0.5 z-10">
+        <div
+          className="absolute -top-2 -right-2 flex gap-0.5 z-10"
+          onTouchStart={(e) => e.stopPropagation()}
+        >
           {cell.dakuten && (
             <VariantButton
               entry={cell.dakuten}
               feedback={dakutenFeedback!}
-              onClick={onKanaClick}
+              onClick={(entry) => {
+                onKanaClick(entry)
+                setIsLongPressed(false)
+              }}
               disabled={disabled}
               label="゛"
             />
@@ -131,20 +280,13 @@ function KanaCellButton({
             <VariantButton
               entry={cell.handakuten}
               feedback={handakutenFeedback!}
-              onClick={onKanaClick}
+              onClick={(entry) => {
+                onKanaClick(entry)
+                setIsLongPressed(false)
+              }}
               disabled={disabled}
               label="゜"
             />
-          )}
-        </div>
-      )}
-
-      {/* Small indicator dot if cell has variants */}
-      {hasVariants && !showVariants && (
-        <div className="absolute top-0.5 right-0.5 flex gap-px">
-          <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-          {cell.handakuten && (
-            <div className="w-1.5 h-1.5 rounded-full bg-accent/40" />
           )}
         </div>
       )}
@@ -171,9 +313,12 @@ function VariantButton({
         e.stopPropagation()
         onClick(entry)
       }}
+      onTouchEnd={(e) => {
+        e.stopPropagation()
+      }}
       disabled={disabled}
       className={cn(
-        "w-8 h-8 sm:w-9 sm:h-9 rounded-md flex items-center justify-center text-xs sm:text-sm font-medium shadow-md border transition-all duration-150",
+        "w-11 h-11 sm:w-10 sm:h-10 rounded-md flex items-center justify-center text-lg sm:text-base font-medium shadow-md border transition-all duration-150",
         "hover:scale-110 active:scale-95",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         feedback.isCorrect &&
@@ -187,7 +332,7 @@ function VariantButton({
       aria-label={`Kana ${entry.kana}, romaji ${entry.romaji}`}
       title={entry.kana}
     >
-      {label === "゛" ? entry.kana : entry.kana}
+      {entry.kana}
     </button>
   )
 }

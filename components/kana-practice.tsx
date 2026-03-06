@@ -5,6 +5,7 @@ import { KanaTable } from "@/components/kana-table"
 import { QuizPrompt } from "@/components/quiz-prompt"
 import { DrawingCanvas } from "@/components/drawing-canvas"
 import { ModeSelector, type KanaMode } from "@/components/mode-selector"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   HIRAGANA_CELLS,
   KATAKANA_CELLS,
@@ -224,7 +225,10 @@ export function KanaPractice() {
               Drill
             </span>
           </div>
-          <ModeSelector mode={mode} onModeChange={setMode} />
+          <div className="flex items-center gap-3">
+            <ModeSelector mode={mode} onModeChange={setMode} />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -240,22 +244,15 @@ export function KanaPractice() {
 
               {/* Scores + timers stacked */}
               <QuizPrompt
-                romaji={currentKana.romaji}
                 score={score}
                 total={total}
                 streak={streak}
-                feedbackType={feedbackType}
-                totalElapsed={totalElapsed}
-                kanaElapsed={kanaElapsed}
-                isCapped={isCapped}
-                avgTime={avgTime}
-                formatTime={formatTime}
               />
 
               {/* Romaji + Drawing side by side */}
               <div className="flex flex-row items-start justify-center gap-6 mt-4">
                 {/* Romaji box */}
-                <div className="relative flex w-40 flex-col items-start">
+                <div className="relative flex w-40 flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                     Romaji
                   </p>
@@ -265,7 +262,7 @@ export function KanaPractice() {
                         ? "border-success bg-success/10 scale-105"
                         : feedbackType === "incorrect"
                           ? "border-destructive bg-destructive/10 animate-shake"
-                          : "border-primary/30 bg-card"
+                          : "border-border bg-card"
                     }`}
                   >
                     <span className="text-5xl font-bold text-foreground tracking-wider">

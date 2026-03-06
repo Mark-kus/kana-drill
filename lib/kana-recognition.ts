@@ -1,30 +1,35 @@
 /**
- * Multi-resolution zone-density kana recognition.
+ * Multi-resolution zone-density kana recognition with aspect ratio
+ * preservation, adaptive dilation, and directional histograms.
  *
- * Instead of comparing raw pixels (filled glyph vs thin strokes),
- * we divide each image into grids at multiple resolutions, compute
- * the ink density per zone, binarize, concatenate the vectors, and
- * compare using Jaccard similarity.
- *
- * Multi-resolution: a coarse grid (5×5) captures overall structure
- * while a fine grid (10×10) discriminates details. The concatenated
- * binary vector (25 + 100 = 125 dims) is compared as a single unit.
+ * Feature vector (per image):
+ *   1. Multi-res binary density (5×5 + 10×10 = 125 binary dims)
+ *   2. Aspect ratio bucket (3 binary dims: tall / square / wide)
+ *   3. Directional histogram (8 direction bins, binarized = 8 dims)
+ * Total: 136 binary dims, compared with Jaccard similarity.
  *
  * Flow:
  * 1. Render reference kana on an offscreen canvas
  * 2. For both reference and user drawing:
  *    a. Find bounding box of ink pixels
- *    b. Normalize to square (center shorter axis)
- *    c. At each resolution, divide into NxN grid, compute density
- *    d. Binarize and concatenate all resolutions
+ *    b. Preserve aspect ratio info as feature
+ *    c. Normalize to square for zone grid computation
+ *    d. At each resolution, divide into NxN grid, compute density
+ *    e. Compute directional histogram from pixel gradients
+ *    f. Binarize and concatenate all features
  * 3. Compare concatenated binary vectors with Jaccard similarity
  */
 
 const ZONE_LEVELS = [5, 10] // coarse (5×5=25) + fine (10×10=100) = 125 dims
 const RENDER_SIZE = 128
 const ALPHA_THRESHOLD = 30
-const USER_DILATE_RADIUS = 6 // fatten user strokes before density calc
 const DENSITY_BIN_THRESHOLD = 0.08 // zone density above this → 1, below → 0
+const DIR_BINS = 8 // 8 direction bins (0°, 45°, 90°, ... 315°)
+const DIR_BIN_THRESHOLD = 0.05 // direction bin above this fraction → 1
+
+// Adaptive dilation: fewer strokes → more dilation per stroke
+const DILATE_BASE = 8 // radius for 1-stroke kana
+const DILATE_MIN = 3 // minimum radius for many-stroke kana
 
 export const MIN_SHAPE_SCORE = 0.55
 
@@ -45,13 +50,15 @@ export function clearMaskCache() {
 
 /**
  * Compare the user's canvas drawing against a set of candidate kana.
+ * `strokeCount` is used for adaptive dilation of the user drawing.
  * Returns results sorted by score descending (best match first).
  */
 export function matchDrawingShape(
   drawingCanvas: HTMLCanvasElement,
-  candidates: string[]
+  candidates: string[],
+  strokeCount: number
 ): ShapeMatchResult[] {
-  const userProfile = extractDensityProfile(drawingCanvas)
+  const userProfile = extractUserProfile(drawingCanvas, strokeCount)
   if (!userProfile) return []
 
   const results: ShapeMatchResult[] = []
@@ -74,7 +81,7 @@ function getKanaProfile(kana: string): number[] {
   const canvas = document.createElement("canvas")
   canvas.width = RENDER_SIZE
   canvas.height = RENDER_SIZE
-  const ctx = canvas.getContext("2d")!
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!
 
   ctx.fillStyle = "black"
   ctx.textAlign = "center"
@@ -83,7 +90,7 @@ function getKanaProfile(kana: string): number[] {
   ctx.fillText(kana, RENDER_SIZE / 2, RENDER_SIZE / 2)
 
   const { data } = ctx.getImageData(0, 0, RENDER_SIZE, RENDER_SIZE)
-  const profile = computeMultiResProfile(data, RENDER_SIZE, RENDER_SIZE)
+  const profile = buildFeatureVector(data, RENDER_SIZE, RENDER_SIZE)
 
   kanaProfileCache.set(kana, profile)
   return profile
@@ -103,10 +110,11 @@ function getJapaneseFont(): string {
 
 // ── User drawing extraction ──────────────────────────────────────
 
-function extractDensityProfile(
-  canvas: HTMLCanvasElement
+function extractUserProfile(
+  canvas: HTMLCanvasElement,
+  strokeCount: number
 ): number[] | null {
-  const ctx = canvas.getContext("2d")
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })
   if (!ctx) return null
 
   const w = canvas.width
@@ -122,19 +130,86 @@ function extractDensityProfile(
   }
   if (!hasPixels) return null
 
-  // Dilate (fatten) user strokes so thin lines produce comparable
-  // zone density to the filled reference glyphs
-  const dilated = dilateImageAlpha(data, w, h, USER_DILATE_RADIUS)
+  // Adaptive dilation: fewer strokes → larger radius
+  const radius = Math.max(
+    DILATE_MIN,
+    Math.round(DILATE_BASE / Math.sqrt(Math.max(1, strokeCount)))
+  )
+  const dilated = dilateImageAlpha(data, w, h, radius)
 
-  return computeMultiResProfile(dilated, w, h)
+  return buildFeatureVector(dilated, w, h)
+}
+
+// ── Feature vector construction ──────────────────────────────────
+
+/**
+ * Build the full feature vector:
+ *  [multi-res density (125)] + [aspect ratio (3)] + [direction histogram (8)]
+ */
+function buildFeatureVector(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): number[] {
+  const bbox = findBoundingBox(data, width, height)
+  if (!bbox) {
+    const totalDims = ZONE_LEVELS.reduce((s, z) => s + z * z, 0) + 3 + DIR_BINS
+    return new Array<number>(totalDims).fill(0)
+  }
+
+  const density = computeMultiResDensity(data, width, height, bbox)
+  const aspect = computeAspectFeature(bbox)
+  const direction = computeDirectionHistogram(data, width, height, bbox)
+
+  return [...density, ...aspect, ...direction]
+}
+
+// ── Bounding box ─────────────────────────────────────────────────
+
+interface BBox {
+  minX: number; minY: number; maxX: number; maxY: number
+}
+
+function findBoundingBox(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): BBox | null {
+  let minX = width
+  let minY = height
+  let maxX = 0
+  let maxY = 0
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > ALPHA_THRESHOLD) {
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+
+  if (maxX < minX) return null
+  return { minX, minY, maxX, maxY }
+}
+
+// ── Aspect ratio feature ─────────────────────────────────────────
+
+/** Encode aspect ratio as 3 binary dims: [tall, square, wide] */
+function computeAspectFeature(bbox: BBox): number[] {
+  const w = bbox.maxX - bbox.minX + 1
+  const h = bbox.maxY - bbox.minY + 1
+  const ratio = w / h // <1 = tall, >1 = wide
+
+  if (ratio < 0.75) return [1, 0, 0] // tall
+  if (ratio > 1.33) return [0, 0, 1] // wide
+  return [0, 1, 0] // square-ish
 }
 
 // ── Dilation ─────────────────────────────────────────────────────
 
-/**
- * Expand non-transparent pixels by `radius` using a circular kernel.
- * Returns a new Uint8ClampedArray with dilated alpha values.
- */
 function dilateImageAlpha(
   data: Uint8ClampedArray,
   width: number,
@@ -142,14 +217,12 @@ function dilateImageAlpha(
   radius: number
 ): Uint8ClampedArray {
   const out = new Uint8ClampedArray(data.length)
-  // Copy RGB channels as-is; we only care about alpha for density
   out.set(data)
   const r2 = radius * radius
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if (data[(y * width + x) * 4 + 3] <= ALPHA_THRESHOLD) continue
-      // Spread this pixel's "ink" to its neighbours
       const yMin = Math.max(0, y - radius)
       const yMax = Math.min(height - 1, y + radius)
       const xMin = Math.max(0, x - radius)
@@ -168,48 +241,22 @@ function dilateImageAlpha(
   return out
 }
 
-// ── Zone density computation ─────────────────────────────────────
+// ── Multi-resolution zone density ────────────────────────────────
 
-/**
- * Compute a multi-resolution binary density profile:
- * 1. Find bounding box of ink pixels
- * 2. Pad + extend to a square (centering the short axis)
- * 3. For each resolution level, divide into NxN grid, compute
- *    zone density, binarize, and append to the output vector
- */
-function computeMultiResProfile(
+function computeMultiResDensity(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
+  bbox: BBox
 ): number[] {
-  // Find bounding box
-  let minX = width
-  let minY = height
-  let maxX = 0
-  let maxY = 0
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > ALPHA_THRESHOLD) {
-        if (x < minX) minX = x
-        if (y < minY) minY = y
-        if (x > maxX) maxX = x
-        if (y > maxY) maxY = y
-      }
-    }
-  }
-
-  const totalDims = ZONE_LEVELS.reduce((s, z) => s + z * z, 0)
-  if (maxX < minX) return new Array<number>(totalDims).fill(0)
-
-  // Small padding
-  const bboxW = maxX - minX + 1
-  const bboxH = maxY - minY + 1
+  // Pad slightly
+  const bboxW = bbox.maxX - bbox.minX + 1
+  const bboxH = bbox.maxY - bbox.minY + 1
   const pad = Math.max(2, Math.round(Math.max(bboxW, bboxH) * 0.05))
-  minX = Math.max(0, minX - pad)
-  minY = Math.max(0, minY - pad)
-  maxX = Math.min(width - 1, maxX + pad)
-  maxY = Math.min(height - 1, maxY + pad)
+  const minX = Math.max(0, bbox.minX - pad)
+  const minY = Math.max(0, bbox.minY - pad)
+  const maxX = Math.min(width - 1, bbox.maxX + pad)
+  const maxY = Math.min(height - 1, bbox.maxY + pad)
 
   // Make square (center shorter axis)
   const w2 = maxX - minX + 1
@@ -218,7 +265,6 @@ function computeMultiResProfile(
   const originX = minX - Math.round((side - w2) / 2)
   const originY = minY - Math.round((side - h2) / 2)
 
-  // Build concatenated profile across all resolution levels
   const profile: number[] = []
 
   for (const zones of ZONE_LEVELS) {
@@ -254,13 +300,64 @@ function computeMultiResProfile(
   return profile
 }
 
+// ── Directional histogram ────────────────────────────────────────
+
+/**
+ * Compute an 8-bin directional histogram from the image gradients
+ * within the bounding box. Each bin corresponds to a 45° range.
+ * The histogram is normalized then binarized.
+ *
+ * Bins: 0=→, 1=↗, 2=↑, 3=↖, 4=←, 5=↙, 6=↓, 7=↘
+ */
+function computeDirectionHistogram(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  bbox: BBox
+): number[] {
+  const bins = new Array<number>(DIR_BINS).fill(0)
+  let total = 0
+
+  // Use Sobel-like gradient on alpha channel within bbox
+  for (let y = bbox.minY + 1; y < bbox.maxY; y++) {
+    for (let x = bbox.minX + 1; x < bbox.maxX; x++) {
+      const a = data[(y * width + x) * 4 + 3]
+      if (a <= ALPHA_THRESHOLD) continue
+
+      // Horizontal gradient (right - left)
+      const aL = data[(y * width + (x - 1)) * 4 + 3]
+      const aR = data[(y * width + (x + 1)) * 4 + 3]
+      const gx = (aR > ALPHA_THRESHOLD ? 1 : 0) - (aL > ALPHA_THRESHOLD ? 1 : 0)
+
+      // Vertical gradient (down - up)
+      const aU = data[((y - 1) * width + x) * 4 + 3]
+      const aD = data[((y + 1) * width + x) * 4 + 3]
+      const gy = (aD > ALPHA_THRESHOLD ? 1 : 0) - (aU > ALPHA_THRESHOLD ? 1 : 0)
+
+      if (gx === 0 && gy === 0) continue
+
+      // atan2 → angle in [0, 2π), quantize to 8 bins
+      let angle = Math.atan2(gy, gx)
+      if (angle < 0) angle += Math.PI * 2
+      const bin = Math.floor((angle / (Math.PI * 2)) * DIR_BINS) % DIR_BINS
+      bins[bin]++
+      total++
+    }
+  }
+
+  // Normalize then binarize
+  if (total === 0) return new Array<number>(DIR_BINS).fill(0)
+  return bins.map((b) => (b / total) >= DIR_BIN_THRESHOLD ? 1 : 0)
+}
+
 // ── Similarity ───────────────────────────────────────────────────
 
 /** Jaccard index for binary vectors: |A∩B| / |A∪B| */
 function jaccardSimilarity(a: number[], b: number[]): number {
   let intersection = 0
   let union = 0
-  for (let i = 0; i < a.length; i++) {
+  const len = Math.min(a.length, b.length)
+  for (let i = 0; i < len; i++) {
     if (a[i] || b[i]) union++
     if (a[i] && b[i]) intersection++
   }

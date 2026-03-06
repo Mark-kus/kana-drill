@@ -54,7 +54,7 @@ export function DrawingCanvas({
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext("2d")
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     setStrokeCount(0)
@@ -190,7 +190,8 @@ export function DrawingCanvas({
 
       const results = matchDrawingShape(
         canvas,
-        strokeMatches.map((c) => c.kana)
+        strokeMatches.map((c) => c.kana),
+        strokes
       )
 
       // Debug: log top 3 matches
@@ -248,7 +249,7 @@ export function DrawingCanvas({
             ? "border-success bg-success/10"
             : feedbackType === "incorrect"
               ? "border-destructive bg-destructive/10"
-              : "border-primary/30 bg-card"
+              : "border-border bg-card"
         )}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
