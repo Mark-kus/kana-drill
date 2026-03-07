@@ -173,8 +173,8 @@ export function DrawingCanvas({
   }, [clearAutoVerify])
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative w-[130px] h-[130px] sm:w-40 sm:h-40">
+    <div className="flex flex-col items-center gap-2 select-none" style={{ WebkitTouchCallout: 'none' }}>
+      <div className="relative w-[130px] h-[130px] sm:w-40 sm:h-40 select-none" style={{ WebkitTouchCallout: 'none' }}>
         {/* Target kana shown behind the drawing when asserting */}
         <span
           className={cn(
@@ -189,7 +189,7 @@ export function DrawingCanvas({
           width={CANVAS_SIZE}
           height={CANVAS_SIZE}
           className={cn(
-            "absolute inset-0 w-full h-full rounded-2xl border-4 cursor-crosshair touch-none transition-all duration-300 z-10",
+            "absolute inset-0 w-full h-full rounded-2xl border-4 cursor-crosshair touch-none select-none transition-all duration-300 z-10",
             feedbackType === "correct"
               ? "border-success bg-success/10"
               : feedbackType === "incorrect"
