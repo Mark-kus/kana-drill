@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { evaluateDrawing, type CandidateKana } from "@/lib/kana-recognition"
 import { useLanguage } from "@/components/language-provider"
 
-const CANVAS_SIZE = 160
+const CANVAS_SIZE = 320
 const AUTO_VERIFY_DELAY_MS = 1000
 
 interface DrawingCanvasProps {
