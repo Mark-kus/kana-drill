@@ -98,52 +98,45 @@ export function KanaPractice() {
 
               <QuizPrompt score={quiz.score} total={quiz.total} streak={quiz.streak} />
 
-              {/* Romaji + Drawing side by side */}
-              <div className="flex flex-row items-start justify-center gap-3 sm:gap-6 mt-4">
+              {/* Romaji + Drawing */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
                 {/* Romaji box */}
-                <div className="flex w-[130px] sm:w-40 flex-col items-center">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                <div className="w-full max-w-xs sm:w-auto flex flex-col items-center gap-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {t.romaji}
                   </p>
                   <div
-                    className={`flex items-center justify-center w-[130px] h-[130px] sm:w-40 sm:h-40 rounded-2xl border-4 transition-all duration-300 ${
+                    className={cn(
+                      "flex items-center justify-center w-full aspect-square sm:w-56 rounded-2xl border-4 transition-colors",
                       quiz.feedbackType === "correct"
-                        ? "border-success bg-success/10 scale-105"
+                        ? "border-success bg-success/10"
                         : quiz.feedbackType === "incorrect"
                           ? "border-destructive bg-destructive/10 animate-shake"
-                          : "border-border bg-card"
-                    }`}
+                          : "border-border bg-card",
+                    )}
                   >
-                    <span className="text-4xl sm:text-5xl font-bold text-foreground tracking-wider">
+                    <span className="text-7xl font-bold text-foreground">
                       {quiz.currentKana.romaji}
                     </span>
                   </div>
-                  <div className="flex items-center justify-center mt-2">
-                    <button
-                      onClick={quiz.handleGiveUp}
-                      disabled={quiz.isProcessing}
-                      className={cn(
-                        "px-2 py-1 text-xs rounded-md transition-colors",
-                        "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                      )}
-                    >
-                      {t.skip}
-                    </button>
-                  </div>
+                  <button
+                    onClick={quiz.handleGiveUp}
+                    disabled={quiz.isProcessing}
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-colors",
+                      "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                    )}
+                  >
+                    {t.skip}
+                  </button>
                 </div>
 
                 {/* Drawing canvas */}
-                <div className="relative flex flex-col items-center">
+                <div className="w-full max-w-xs sm:w-auto flex flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                     {t.drawKana}
                   </p>
-
-                  <DrawingHintTooltip
-                    bestMatchKana={drawingHint.bestMatchKana}
-                    strokeHint={drawingHint.strokeHint}
-                    visible={hintVisible}
-                  />
 
                   <DrawingCanvas
                     targetKana={quiz.currentKana.kana}
@@ -153,6 +146,13 @@ export function KanaPractice() {
                     disabled={quiz.isProcessing}
                     feedbackType={quiz.feedbackType}
                     showKanaShadow={quiz.correctKana !== null}
+                    hintTooltip={
+                      <DrawingHintTooltip
+                        bestMatchKana={drawingHint.bestMatchKana}
+                        strokeHint={drawingHint.strokeHint}
+                        visible={hintVisible}
+                      />
+                    }
                   />
                 </div>
               </div>

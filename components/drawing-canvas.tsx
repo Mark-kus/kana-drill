@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useEffect, useCallback } from "react"
+import { useRef, useState, useEffect, useCallback, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { evaluateDrawing, type CandidateKana } from "@/lib/kana-recognition"
 import { useLanguage } from "@/components/language-provider"
@@ -19,6 +19,7 @@ interface DrawingCanvasProps {
   disabled: boolean
   feedbackType: "correct" | "incorrect" | null
   showKanaShadow?: boolean
+  hintTooltip?: ReactNode
 }
 
 export function DrawingCanvas({
@@ -29,6 +30,7 @@ export function DrawingCanvas({
   disabled,
   feedbackType,
   showKanaShadow,
+  hintTooltip,
 }: DrawingCanvasProps) {
   const { t } = useLanguage()
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -173,12 +175,12 @@ export function DrawingCanvas({
   }, [clearAutoVerify])
 
   return (
-    <div className="flex flex-col items-center gap-2 select-none" style={{ WebkitTouchCallout: 'none' }}>
-      <div className="relative w-[130px] h-[130px] sm:w-40 sm:h-40 select-none" style={{ WebkitTouchCallout: 'none' }}>
-        {/* Target kana shown behind the drawing when asserting */}
+    <div className="w-full flex flex-col items-center gap-2 select-none" style={{ WebkitTouchCallout: 'none' }}>
+      <div className="relative w-full aspect-square sm:w-56 select-none" style={{ WebkitTouchCallout: 'none' }}>
+        {hintTooltip}
         <span
           className={cn(
-            "absolute inset-0 flex items-center justify-center text-7xl font-bold pointer-events-none select-none z-0",
+            "absolute inset-0 flex items-center justify-center text-9xl font-bold pointer-events-none select-none",
             feedbackType === "correct" || showKanaShadow ? "opacity-20" : "opacity-0",
           )}
         >
@@ -189,7 +191,7 @@ export function DrawingCanvas({
           width={CANVAS_SIZE}
           height={CANVAS_SIZE}
           className={cn(
-            "absolute inset-0 w-full h-full rounded-2xl border-4 cursor-crosshair touch-none select-none transition-all duration-300 z-10",
+            "absolute inset-0 w-full h-full rounded-2xl border-4 cursor-crosshair touch-none select-none transition-colors",
             feedbackType === "correct"
               ? "border-success bg-success/10"
               : feedbackType === "incorrect"
@@ -202,15 +204,15 @@ export function DrawingCanvas({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground tabular-nums min-w-[4.5rem]">
+      <div className="flex items-center gap-2 select-none">
+        <span className="text-xs text-muted-foreground tabular-nums min-w-[4.5rem] select-none">
           {strokeCount} {strokeCount === 1 ? t.stroke : t.strokes}
         </span>
         <button
           onClick={clearCanvas}
           disabled={disabled || !hasDrawn}
           className={cn(
-            "px-2 py-1 text-xs rounded-md transition-colors",
+            "px-2 py-1 text-xs rounded-md transition-colors select-none",
             "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}

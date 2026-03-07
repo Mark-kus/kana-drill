@@ -126,7 +126,7 @@ function KanaCellButton({
         }}
         disabled={disabled}
         className={cn(
-          "w-full aspect-square rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-medium transition-all duration-200 relative overflow-hidden select-none",
+          "w-full aspect-square rounded-lg flex items-center justify-center text-3xl sm:text-4xl font-medium transition-all duration-200 relative overflow-hidden select-none",
           "hover:scale-105 active:scale-95",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           baseFeedback.isCorrect &&
