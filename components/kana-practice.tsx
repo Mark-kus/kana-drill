@@ -101,13 +101,13 @@ export function KanaPractice() {
               {/* Romaji + Drawing */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
                 {/* Romaji box */}
-                <div className="w-full max-w-xs sm:w-auto flex flex-col items-center gap-2">
+                <div className="w-full max-w-[16rem] sm:w-auto flex flex-col items-center gap-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {t.romaji}
                   </p>
                   <div
                     className={cn(
-                      "flex items-center justify-center w-full aspect-square sm:w-56 rounded-2xl border-4 transition-colors",
+                      "flex items-center justify-center w-full aspect-square sm:w-56 rounded-xl border-4 transition-colors",
                       quiz.feedbackType === "correct"
                         ? "border-success bg-success/10"
                         : quiz.feedbackType === "incorrect"
@@ -133,7 +133,7 @@ export function KanaPractice() {
                 </div>
 
                 {/* Drawing canvas */}
-                <div className="w-full max-w-xs sm:w-auto flex flex-col items-center">
+                <div className="w-full max-w-[16rem] sm:w-auto flex flex-col items-center">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                     {t.drawKana}
                   </p>
