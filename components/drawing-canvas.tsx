@@ -2,15 +2,19 @@
 
 import { useRef, useState, useEffect, useCallback, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { evaluateDrawing, type CandidateKana } from "@/lib/kana-recognition"
 import { useLanguage } from "@/components/language-provider"
+import { VerificationEngine } from "@/src/lib/eval/verificationEngine"
+import { composeFailureHint } from "@/src/lib/eval/hints"
+import type { Stroke } from "@/src/lib/eval/raster"
+import type { Difficulty } from "@/src/lib/eval/verificationEngine"
 
 const CANVAS_SIZE = 320
-const AUTO_VERIFY_DELAY_MS = 1000
+const AUTO_VERIFY_DELAY_MS = 700
 
 interface DrawingCanvasProps {
   targetKana: string
-  candidateKanas: CandidateKana[]
+  candidateKanas: string[]
+  difficulty: Difficulty
   onCorrect: () => void
   onHintChange: (hint: {
     bestMatchKana: string | null
@@ -25,6 +29,7 @@ interface DrawingCanvasProps {
 export function DrawingCanvas({
   targetKana,
   candidateKanas,
+  difficulty,
   onCorrect,
   onHintChange,
   disabled,
@@ -41,6 +46,8 @@ export function DrawingCanvas({
   const autoVerifyRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const strokeCountRef = useRef(0)
   const strokeColorRef = useRef<string | null>(null)
+  const strokesRef = useRef<Stroke[]>([])
+  const currentStrokeRef = useRef<Stroke>([])
 
   // Cache the stroke color and update it when the theme changes
   useEffect(() => {
@@ -80,6 +87,8 @@ export function DrawingCanvas({
     strokeCountRef.current = 0
     setHasDrawn(false)
     clearAutoVerify()
+    strokesRef.current = []
+    currentStrokeRef.current = []
     onHintChange({ bestMatchKana: null, strokeHint: null })
   }, [onHintChange, clearAutoVerify])
 
@@ -117,6 +126,7 @@ export function DrawingCanvas({
     setHasDrawn(true)
     clearAutoVerify()
     onHintChange({ bestMatchKana: null, strokeHint: null })
+    currentStrokeRef.current = [pos]
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -136,38 +146,35 @@ export function DrawingCanvas({
     ctx.stroke()
 
     lastPosRef.current = pos
+    currentStrokeRef.current.push(pos)
   }
 
-  /** Map an evaluation hint type to a localized string */
-  const translateHint = (result: ReturnType<typeof evaluateDrawing>): string | null => {
-    if (result.hintType === "more-strokes") return t.tryMoreStrokes(result.expectedStrokeRange!)
-    if (result.hintType === "fewer-strokes") return t.tryFewerStrokes(result.expectedStrokeRange!)
-    if (result.hintType === "more-precision") return t.tryMorePrecision
-    return null
-  }
-
-  const handlePointerUp = () => {
+  const finishStroke = useCallback(() => {
     if (!isDrawingRef.current) return
     isDrawingRef.current = false
     strokeCountRef.current += 1
     setStrokeCount(strokeCountRef.current)
 
+    if (currentStrokeRef.current.length > 0) {
+      strokesRef.current.push([...currentStrokeRef.current])
+    }
+    currentStrokeRef.current = []
+
     clearAutoVerify()
-    const currentStrokes = strokeCountRef.current
+    const currentStrokes = strokesRef.current
+
     autoVerifyRef.current = setTimeout(() => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const result = evaluateDrawing(canvas, targetKana, candidateKanas, currentStrokes)
-      if (result.isCorrect) {
+      const engine = new VerificationEngine({ difficulty })
+
+      const result = engine.evaluate(currentStrokes, targetKana, candidateKanas)
+
+      if (result.passed) {
         onCorrect()
       } else {
-        onHintChange({
-          bestMatchKana: result.bestMatch,
-          strokeHint: translateHint(result),
-        })
+        onHintChange(composeFailureHint(result, t))
       }
     }, AUTO_VERIFY_DELAY_MS)
-  }
+  }, [clearAutoVerify, difficulty, targetKana, candidateKanas, onCorrect, onHintChange, t])
 
   // Cancel pending auto-verify on unmount
   useEffect(() => {
@@ -200,7 +207,11 @@ export function DrawingCanvas({
           )}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
+          onPointerUp={finishStroke}
+          onPointerCancel={finishStroke}
+          onLostPointerCapture={() => {
+            if (isDrawingRef.current) finishStroke()
+          }}
         />
       </div>
 

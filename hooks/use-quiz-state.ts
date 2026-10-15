@@ -8,8 +8,8 @@ import {
   getAllKana,
   type KanaEntry,
 } from "@/lib/kana-data"
-import type { CandidateKana } from "@/lib/kana-recognition"
 import type { KanaMode } from "@/components/mode-selector"
+import type { Difficulty } from "@/src/lib/eval/verificationEngine"
 
 const CORRECT_CLICK_DELAY = 600
 const INCORRECT_CLICK_DELAY = 800
@@ -20,6 +20,7 @@ export function useQuizState() {
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [mode, setMode] = useState<KanaMode>("hiragana")
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium")
   const [score, setScore] = useState(0)
   const [total, setTotal] = useState(0)
   const [streak, setStreak] = useState(0)
@@ -32,14 +33,7 @@ export function useQuizState() {
 
   const cells = mode === "hiragana" ? HIRAGANA_CELLS : KATAKANA_CELLS
   const allKana = useMemo(() => getAllKana(cells), [cells])
-  const candidateKanas: CandidateKana[] = useMemo(
-    () =>
-      allKana.map((entry) => ({
-        kana: entry.kana,
-        strokeRange: getKanaStrokeRange(entry.kana),
-      })),
-    [allKana],
-  )
+
 
   const getRandomKana = useCallback(
     (exclude?: string): KanaEntry => {
@@ -156,6 +150,8 @@ export function useQuizState() {
   return {
     mode,
     setMode,
+    difficulty,
+    setDifficulty,
     score,
     total,
     streak,
@@ -167,7 +163,7 @@ export function useQuizState() {
     shuffleSeed,
     currentKana,
     cells,
-    candidateKanas,
+    allKana,
     handleKanaClick,
     handleDrawingCorrect,
     handleGiveUp,

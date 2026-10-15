@@ -140,7 +140,8 @@ export function KanaPractice() {
 
                   <DrawingCanvas
                     targetKana={quiz.currentKana.kana}
-                    candidateKanas={quiz.candidateKanas}
+                    candidateKanas={quiz.allKana.map((k) => k.kana)}
+                    difficulty={quiz.difficulty}
                     onCorrect={quiz.handleDrawingCorrect}
                     onHintChange={setDrawingHint}
                     disabled={quiz.isProcessing}
