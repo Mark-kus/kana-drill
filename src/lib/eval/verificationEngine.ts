@@ -11,7 +11,6 @@ import {
   getKanaReference,
   getConfusables,
   computeMaxRotationScore,
-  getKanaNames,
 } from "./kanaReferences"
 import { getKanaStrokeRange } from "../../../lib/kana-data"
 
@@ -150,15 +149,3 @@ export class VerificationEngine {
     }
   }
 }
-
-export function verifyDrawing(
-  userStrokes: Stroke[],
-  targetKana: string,
-  difficulty: Difficulty = "medium",
-  candidateKanas?: string[]
-): VerificationResult {
-  const engine = new VerificationEngine({ difficulty })
-  return engine.evaluate(userStrokes, targetKana, candidateKanas)
-}
-
-export { getKanaNames }

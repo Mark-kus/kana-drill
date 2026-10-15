@@ -105,4 +105,24 @@ describe("verificationEngine", () => {
     expect(ba.passed).toBe(false)
     expect(ba.strokeHint?.tooMany).toBe(false)
   })
+
+  it("accepts a sloppy む that deviates from the canonical template", () => {
+    const engine = new VerificationEngine({ difficulty: "medium" })
+    const template = KANA_TEMPLATES.find((t) => t.kana === "む")!
+    let seed = 12345
+    const randn = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      const u = seed / 0x7fffffff
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      const v = seed / 0x7fffffff
+      return Math.sqrt(-2 * Math.log(u || 1e-9)) * Math.cos(2 * Math.PI * v)
+    }
+    const sigma = 0.07
+    const strokes = template.strokes.map((s) =>
+      s.map((p) => ({ x: (p.x + randn() * sigma) * 320, y: (p.y + randn() * sigma) * 320 }))
+    )
+    const result = engine.evaluate(strokes, "む")
+    expect(result.passed).toBe(true)
+    expect(result.confusion).not.toBe("ぬ")
+  })
 })

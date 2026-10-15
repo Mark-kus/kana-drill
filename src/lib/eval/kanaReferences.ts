@@ -163,8 +163,3 @@ export function computeMaxRotationScore(
 
   return { score: bestScore, bestAngleIndex }
 }
-
-export function resetCache(): void {
-  referenceCache.clear()
-  confusionCache.clear()
-}

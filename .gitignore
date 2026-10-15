@@ -8,3 +8,12 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Investigation scratch (not part of the product)
+tests/_*.test.ts
+*.txt
+.agents/
+skills-lock.json

@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import {
   HIRAGANA_CELLS,
   KATAKANA_CELLS,
-  getKanaStrokeRange,
   getAllKana,
   type KanaEntry,
 } from "@/lib/kana-data"
@@ -20,7 +19,7 @@ export function useQuizState() {
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [mode, setMode] = useState<KanaMode>("hiragana")
-  const [difficulty, setDifficulty] = useState<Difficulty>("medium")
+  const [difficulty] = useState<Difficulty>("medium")
   const [score, setScore] = useState(0)
   const [total, setTotal] = useState(0)
   const [streak, setStreak] = useState(0)
@@ -151,7 +150,6 @@ export function useQuizState() {
     mode,
     setMode,
     difficulty,
-    setDifficulty,
     score,
     total,
     streak,
